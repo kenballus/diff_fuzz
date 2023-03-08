@@ -10,6 +10,7 @@ import subprocess
 import multiprocessing
 import random
 import functools
+import itertools
 import io
 import os
 import re
@@ -37,7 +38,6 @@ assert SEED_DIR.is_dir()
 for seed in SEED_INPUTS:
     assert seed.is_file()
 
-# fingerprint_t = Tuple[FrozenSet[int], ...]
 fingerprint_t = int
 
 
@@ -155,32 +155,50 @@ def normalize_showmap_output(proc: subprocess.Popen, target_config: TargetConfig
 def run_executables(
     current_input: PosixPath,
 ) -> Tuple[fingerprint_t, Tuple[int, ...], Tuple[bytes, ...]]:
-    procs: List[subprocess.Popen] = []
+    traced_procs: List[subprocess.Popen] = []
+
+    # We need these to extract exit statuses
+    untraced_procs: List[subprocess.Popen] = []
+
+
     for target_config in TARGET_CONFIGS:
         command_line: List[str] = make_command_line(target_config, current_input)
-        procs.append(
-            subprocess.Popen(
-                command_line,
-                stdin=open(current_input),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                env=target_config.env,
+        with open(current_input) as input_file:
+            traced_procs.append(
+                subprocess.Popen(
+                    command_line,
+                    stdin=input_file,
+                    stdout=subprocess.PIPE if OUTPUT_DIFFERENTIALS_MATTER else subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    env=target_config.env,
+                )
             )
-        )
+        with open(current_input) as input_file:
+            untraced_procs.append(
+                subprocess.Popen(
+                    command_line[command_line.index("--") + 1:],
+                    stdin=input_file,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    env=target_config.env,
+                )
+            )
 
-    for proc in procs:
+    for proc in itertools.chain(traced_procs, untraced_procs):
         proc.wait()
 
     stdouts: List[bytes] = []
-    for proc, target_config in zip(procs, TARGET_CONFIGS):
+    for proc, target_config in zip(traced_procs, TARGET_CONFIGS):
         stdouts.append(normalize_showmap_output(proc, target_config))
 
-    fingerprint: fingerprint_t = hash(
-        tuple(
-            get_trace_edge_set(open(get_trace_filename(c.executable, current_input))) for c in TARGET_CONFIGS
-        )
-    )
-    statuses: Tuple[int, ...] = tuple(proc.returncode != 0 for proc in procs)
+    l = []
+    for c in TARGET_CONFIGS:
+        with open(get_trace_filename(c.executable, current_input)) as trace_file:
+            l.append(get_trace_edge_set(trace_file))
+
+    fingerprint = hash(tuple(l))
+
+    statuses: Tuple[int, ...] = tuple(proc.returncode for proc in untraced_procs)
     return fingerprint, statuses, tuple(stdouts)
 
 
@@ -200,8 +218,8 @@ def main() -> None:
     explored: Set[fingerprint_t] = set()
 
     generation: int = 0
-    differentials: List[PosixPath] = []
-    fine_grained_differentials: List[PosixPath] = []
+    exit_status_differentials: List[PosixPath] = []
+    output_differentials: List[PosixPath] = []
     try:
         with multiprocessing.Pool(processes=multiprocessing.cpu_count() // len(TARGET_CONFIGS)) as pool:
             while len(input_queue) != 0:  # While there are still inputs to check,
@@ -228,22 +246,22 @@ def main() -> None:
                             print(
                                 color(
                                     Color.blue,
-                                    f"Differential: {str(current_input.resolve())}",
+                                    f"Exit Status Differential: {str(current_input.resolve())}",
                                 )
                             )
                             for i, status in enumerate(statuses):
                                 print(
                                     color(
                                         Color.red if status else Color.blue,
-                                        f"    {'failed' if status else 'succeeded'}:\t{str(TARGET_CONFIGS[i].executable)}",
+                                        f"    Exit status {status}:\t{str(TARGET_CONFIGS[i].executable)}",
                                     )
                                 )
-                            differentials.append(current_input)
+                            exit_status_differentials.append(current_input)
                         elif len(set(stdouts)) != 1:
                             print(
                                 color(
                                     Color.yellow,
-                                    f"Fine-grained differential: {str(current_input.resolve())}",
+                                    f"Output differential: {str(current_input.resolve())}",
                                 )
                             )
                             for i, s in enumerate(stdouts):
@@ -253,9 +271,9 @@ def main() -> None:
                                         f"    {str(TARGET_CONFIGS[i].executable)} printed\t{s!r}",
                                     )
                                 )
-                            fine_grained_differentials.append(current_input)
+                            output_differentials.append(current_input)
                         else:
-                            # We don't mutate differentials, even if they're new
+                            # We don't mutate exit_status_differentials, even if they're new
                             # print(color(Color.yellow, f"New coverage: {str(current_input.resolve())}"))
                             mutation_candidates.append(current_input)
                     else:
@@ -268,12 +286,16 @@ def main() -> None:
                         input_queue.append(mutate_input(input_to_mutate))
 
                 for reject in rejected_candidates:
-                    os.remove(reject)
+                    if reject not in SEED_INPUTS:
+                        os.remove(reject)
 
                 print(
                     color(
                         Color.green,
-                        f"End of generation {generation}.\nDifferentials:\t\t\t{len(differentials)}\nFine-grained differentials:\t{len(fine_grained_differentials)}\nMutation candidates:\t\t{len(mutation_candidates)}",
+                        f"End of generation {generation}.\n"
+                        f"Output differentials:\t\t{len(output_differentials)}\n"
+                        f"Exit status differentials:\t{len(exit_status_differentials)}\n"
+                        f"Mutation candidates:\t\t{len(mutation_candidates)}",
                     )
                 )
 
@@ -283,15 +305,15 @@ def main() -> None:
     except KeyboardInterrupt:
         pass
 
-    if differentials == fine_grained_differentials == []:
+    if exit_status_differentials == output_differentials == []:
         print("No differentials found! Try increasing ROUGH_DESIRED_QUEUE_LEN.")
     else:
-        if differentials != []:
-            print(f"Differentials:")
-            print("\n".join(str(f.resolve()) for f in differentials))
-        if fine_grained_differentials != []:
-            print(f"Fine-grained differentials:")
-            print("\n".join(str(f.resolve()) for f in fine_grained_differentials))
+        if exit_status_differentials != []:
+            print(f"Exit status differentials:")
+            print("\n".join(str(f.resolve()) for f in exit_status_differentials))
+        if output_differentials != []:
+            print(f"Output differentials:")
+            print("\n".join(str(f.resolve()) for f in output_differentials))
 
 
 # For pretty printing

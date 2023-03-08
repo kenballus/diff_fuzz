@@ -17,6 +17,10 @@ TRACE_DIR: PosixPath = PosixPath("./traces")
 # Time in milliseconds given to each process
 TIMEOUT_TIME: int = 100000
 
+# Set this to false if you only care about exit status differentials
+# (i.e. the programs you're testing aren't expected to have identical output on stdout)
+OUTPUT_DIFFERENTIALS_MATTER: bool = True
+
 # Roughly how many processes to allow in a generation (within a factor of 2)
 ROUGH_DESIRED_QUEUE_LEN: int = 1000
 
@@ -28,7 +32,7 @@ AFL_ROOT: PosixPath = PosixPath("/home/bkallus/fuzzing/AFLplusplus/")
 class TargetConfig(NamedTuple):
     executable: PosixPath  # The path to this target's executable
     cli_args: List[str]  # The CLI arguments this target needs
-    needs_qemu: bool  # Whether this executable needs to run in QEMU mode (is a binary that wasn't compiled with afl-cc)
+    needs_qemu: bool  # Whether this executable needs to run in QEMU mode (is a binary that wasn't compiled with AFL instrumentation)
     needs_python_afl: bool  # Whether this executable needs to run with python-afl (is a python script)
     env: Dict[str, str]  # The environment variables to pass to the executable
 
@@ -38,14 +42,14 @@ TARGET_CONFIGS: List[TargetConfig] = [
     TargetConfig(
         executable=PosixPath("./targets/baby-cpp/baby-cpp"),
         cli_args=[],
-        needs_qemu=False,
+        needs_qemu=True,
         needs_python_afl=False,
         env=dict(os.environ),
     ),
     TargetConfig(
         executable=PosixPath("./targets/baby-c/baby-c"),
         cli_args=[],
-        needs_qemu=False,
+        needs_qemu=True,
         needs_python_afl=False,
         env=dict(os.environ),
     ),
