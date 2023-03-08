@@ -9,6 +9,9 @@ from typing import NamedTuple, List, Dict
 import os
 
 # The directory where the seed inputs are
+# The seeds are the files from which all the fuzzing inputs are produced,
+# so it's important that the seeds are a decently representative sample
+# of the inputs accepted by the targets.
 SEED_DIR: PosixPath = PosixPath("./seeds")
 
 # Where program traces end up
