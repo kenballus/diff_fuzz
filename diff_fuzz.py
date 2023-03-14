@@ -120,7 +120,7 @@ def make_command_line(target_config: TargetConfig, current_input: PosixPath) -> 
     if target_config.needs_python_afl:
         command_line.append("py-afl-showmap")
     else:
-        command_line.append(str(AFL_ROOT.resolve()) + "/afl-showmap")
+        command_line.append((str(AFL_ROOT.resolve()) + "/" if AFL_ROOT is not None else "") + "afl-showmap")
     if target_config.needs_qemu:  # Enable QEMU mode, if necessary
         command_line.append("-Q")
     command_line.append("-e")  # Only care about edge coverage; ignore hit counts
@@ -139,9 +139,8 @@ def make_command_line(target_config: TargetConfig, current_input: PosixPath) -> 
 
 
 def normalize_showmap_output(proc: subprocess.Popen, target_config: TargetConfig) -> bytes:
-    if proc.stdout is None:
-        return b""
-    elif target_config.needs_python_afl:
+    assert proc.stdout is not None
+    if target_config.needs_python_afl:
         # python-afl doesn't clutter stdout, so leave it alone
         return proc.stdout.read()
     else:

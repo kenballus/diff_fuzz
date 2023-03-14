@@ -5,7 +5,7 @@
 #############################################################################################
 
 from pathlib import PosixPath
-from typing import NamedTuple, List, Dict
+from typing import NamedTuple, List, Dict, Optional
 import os
 
 # The directory where the seed inputs are
@@ -29,7 +29,8 @@ ROUGH_DESIRED_QUEUE_LEN: int = 1000
 
 # The location of the installed AFL, if it's not in the PATH.
 # Note that python-afl will always use the installation in your PATH.
-AFL_ROOT: PosixPath = PosixPath("/home/bkallus/fuzzing/AFLplusplus/")
+# If AFL is in your path, leave this set to `None`
+AFL_ROOT: Optional[PosixPath] = None
 
 
 class TargetConfig(NamedTuple):
