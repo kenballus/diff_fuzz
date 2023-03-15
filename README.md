@@ -26,7 +26,9 @@ Both exit with status 255 when stdin has no bytes available for consumption.
 `baby-cpp` exits with status 1 when its byte (unsigned) is greater than 1.
 Both exit with status 0 in all other cases.
 Of course, these two programs will exhibit differential behavior when the byte they read has its most significant bit set.
-The fuzzer should discover such an input in generation 1.
+The fuzzer will probably discover such an input in generation 1.
+
+`baby-c` is compiled without AFL instrumentation in order to demonstrate QEMU mode.
 
 # Acknowledgements:
 This work made possible by the DARPA GAPS program and the GAPS teams at GE Research and Dartmouth College.
