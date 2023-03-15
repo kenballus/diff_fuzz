@@ -1,5 +1,4 @@
 # `diff_fuzz.py`
-
 `diff_fuzz.py` is a coverage-guided differential fuzzer written in Python.
 Each configuration option is set and documented in `config.py`.
 
@@ -29,6 +28,12 @@ Of course, these two programs will exhibit differential behavior when the byte t
 The fuzzer will probably discover such an input in generation 1.
 
 `baby-c` is compiled without AFL instrumentation in order to demonstrate QEMU mode.
+
+# Grammar-Based Fuzzing
+To use grammar-based mutation, you need to supply a file `grammar.py` with the following symbols defined:
+- `grammar_re`:   A regular expression that describes the grammar.
+- `grammar_dict`: A dictionary that labels the named group rules in `grammar_re` with their names as strings.
+- `generate_random_matching_input`: A function that takes a regular expression, and returns a string matching that expression. (Hint: try `hypothesis.strategies.from_regex`)
 
 # Acknowledgements:
 This work made possible by the DARPA GAPS program and the GAPS teams at GE Research and Dartmouth College.
