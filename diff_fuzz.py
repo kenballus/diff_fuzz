@@ -143,7 +143,7 @@ def normalize_showmap_output(proc: subprocess.Popen, target_config: TargetConfig
     assert proc.stdout is not None
     if USES_AFLPLUSPLUS:
         stdout_bytes: bytes = proc.stdout.read()
-        return stdout_bytes[: stdout_bytes.index(SHOWMAP_STDOUT_FOOTER)]
+        return stdout_bytes[: stdout_bytes.index(AFLPLUSPLUS_SHOWMAP_STDOUT_FOOTER)]
     else:
         return proc.stdout.read()
 

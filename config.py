@@ -29,7 +29,7 @@ ROUGH_DESIRED_QUEUE_LEN: int = 1000
 
 # AFL++ and AFL differ a little about what goes on stdout and what goes on stderr.
 # Set this flag if you're using AFL++ so that can be handled correctly.
-USES_AFLPLUSPLUS: bool = False
+USES_AFLPLUSPLUS: bool = True
 
 class TargetConfig(NamedTuple):
     executable: PosixPath  # The path to this target's executable
