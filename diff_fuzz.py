@@ -138,17 +138,14 @@ def make_command_line(target_config: TargetConfig, current_input: PosixPath) -> 
     return command_line
 
 
+AFLPLUSPLUS_SHOWMAP_STDOUT_FOOTER: bytes = b"\x1b[0;36mafl-showmap"
 def normalize_showmap_output(proc: subprocess.Popen, target_config: TargetConfig) -> bytes:
     assert proc.stdout is not None
-    if target_config.needs_python_afl:
-        # python-afl doesn't clutter stdout, so leave it alone
-        return proc.stdout.read()
-    else:
-        # afl-showmap (not the python version, though) sticks this stupid junk
-        # on stdout, so we have to cut it out of our targets' outputs.
-        SHOWMAP_STDOUT_FOOTER: bytes = b"\x1b[0;36mafl-showmap"
+    if USES_AFLPLUSPLUS:
         stdout_bytes: bytes = proc.stdout.read()
         return stdout_bytes[: stdout_bytes.index(SHOWMAP_STDOUT_FOOTER)]
+    else:
+        return proc.stdout.read()
 
 
 def run_executables(

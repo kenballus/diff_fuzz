@@ -27,11 +27,9 @@ OUTPUT_DIFFERENTIALS_MATTER: bool = True
 # Roughly how many processes to allow in a generation (within a factor of 2)
 ROUGH_DESIRED_QUEUE_LEN: int = 1000
 
-# The location of the installed AFL, if it's not in the PATH.
-# Note that python-afl will always use the installation in your PATH.
-# If AFL is in your path, leave this set to `None`
-AFL_ROOT: Optional[PosixPath] = None
-
+# AFL++ and AFL differ a little about what goes on stdout and what goes on stderr.
+# Set this flag if you're using AFL++ so that can be handled correctly.
+USES_AFLPLUSPLUS: bool = False
 
 class TargetConfig(NamedTuple):
     executable: PosixPath  # The path to this target's executable
