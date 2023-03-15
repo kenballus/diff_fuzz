@@ -29,6 +29,9 @@ The fuzzer will probably discover such an input in generation 1.
 
 `baby-c` is compiled without AFL instrumentation in order to demonstrate QEMU mode.
 
+Also included is `baby-py`, which is a target demonstrating python instrumentation.
+Its behavior differs from the other two targets in a few ways, most notably that it requires that it reads 1 UTF-8 character, not 1 byte.
+
 # Grammar-Based Fuzzing
 To use grammar-based mutation, you need to supply a file `grammar.py` with the following symbols defined:
 - `grammar_re`:   A regular expression that describes the grammar.
