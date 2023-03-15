@@ -46,7 +46,7 @@ TARGET_CONFIGS: List[TargetConfig] = [
     TargetConfig(
         executable=PosixPath("./targets/baby-cpp/baby-cpp"),
         cli_args=[],
-        needs_qemu=True,
+        needs_qemu=False,
         needs_python_afl=False,
         env=dict(os.environ),
     ),
