@@ -139,6 +139,8 @@ def make_command_line(target_config: TargetConfig, current_input: PosixPath) -> 
 
 
 AFLPLUSPLUS_SHOWMAP_STDOUT_FOOTER: bytes = b"\x1b[0;36mafl-showmap"
+
+
 def normalize_showmap_output(proc: subprocess.Popen, target_config: TargetConfig) -> bytes:
     assert proc.stdout is not None
     if USES_AFLPLUSPLUS:
@@ -156,7 +158,6 @@ def run_executables(
     # We need these to extract exit statuses
     untraced_procs: List[subprocess.Popen] = []
 
-
     for target_config in TARGET_CONFIGS:
         command_line: List[str] = make_command_line(target_config, current_input)
         with open(current_input) as input_file:
@@ -172,7 +173,7 @@ def run_executables(
         with open(current_input) as input_file:
             untraced_procs.append(
                 subprocess.Popen(
-                    command_line[command_line.index("--") + 1:],
+                    command_line[command_line.index("--") + 1 :],
                     stdin=input_file,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,

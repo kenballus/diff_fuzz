@@ -31,6 +31,7 @@ ROUGH_DESIRED_QUEUE_LEN: int = 1000
 # Set this flag if you're using AFL++ so that can be handled correctly.
 USES_AFLPLUSPLUS: bool = True
 
+
 class TargetConfig(NamedTuple):
     executable: PosixPath  # The path to this target's executable
     cli_args: List[str]  # The CLI arguments this target needs
@@ -55,4 +56,11 @@ TARGET_CONFIGS: List[TargetConfig] = [
         needs_python_afl=False,
         env=dict(os.environ),
     ),
+    #    TargetConfig(
+    #        executable=PosixPath("./targets/baby-py/baby.py"),
+    #        cli_args=[],
+    #        needs_qemu=False,
+    #        needs_python_afl=True,
+    #        env=dict(os.environ),
+    #    ),
 ]
