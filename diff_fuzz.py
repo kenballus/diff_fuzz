@@ -120,7 +120,7 @@ def make_command_line(target_config: TargetConfig, current_input: PosixPath) -> 
     if target_config.needs_python_afl:
         command_line.append("py-afl-showmap")
     else:
-        command_line.append((str(AFL_ROOT.resolve()) + "/" if AFL_ROOT is not None else "") + "afl-showmap")
+        command_line.append("afl-showmap")
     if target_config.needs_qemu:  # Enable QEMU mode, if necessary
         command_line.append("-Q")
     command_line.append("-e")  # Only care about edge coverage; ignore hit counts
