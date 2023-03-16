@@ -1,4 +1,4 @@
-FROM debian:bullseye
+FROM ubuntu:kinetic
 
 # Make an unprivileged user and set up its PATH
 RUN useradd --create-home fuzzing_user
