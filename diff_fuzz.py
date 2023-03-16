@@ -22,7 +22,7 @@ from config import *
 
 HAS_GRAMMAR: bool = False
 try:
-    from grammar import generate_random_matching_input, grammar_re, grammar_dict
+    from grammar import generate_random_matching_input, grammar_re, grammar_dict # type: ignore
 
     print("Importing grammar from `grammar.py`.", file=sys.stderr)
     HAS_GRAMMAR = True
