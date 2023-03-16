@@ -50,9 +50,11 @@ Its behavior differs from the other two targets in a few ways, most notably that
 
 # Interpreting Results
 Once a differential has been found, you should see output that looks something like this:
-<code style="color : blue">Exit Status Differential: /home/fuzzing_user/diff_fuzz/inputs/1436445302.input</code>
-<code style="color : red">    Exit status 1:	targets/baby-cpp/baby-cpp</code>
-<code style="color : blue">    Exit status 0:	targets/baby-c/baby-c</code>
+```
+Exit Status Differential: /home/fuzzing_user/diff_fuzz/inputs/1436445302.input
+    Exit status 1:	targets/baby-cpp/baby-cpp
+    Exit status 0:	targets/baby-c/baby-c
+```
 This indicates that the generated input `inputs/1436445302.input` causes `baby-cpp` to exit with status 1, and `baby-c` to exit with status 0.
 In an actual fuzzing run, you would then grab that input and inspect it to determine the cause of the differential behavior.
 
