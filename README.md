@@ -7,10 +7,8 @@
 Run
 ```sh
 docker build . --tag diff_fuzz
-docker run -it --name diff_fuzz_container --network host diff_fuzz:latest /bin/bash
+docker run -it --name diff_fuzz_container diff_fuzz:latest /bin/bash
 ```
-
-If either of those gives you errors about the network interface (as they do on some of my systems), try adding `--network host` to the end of each command.
 
 ## Without Docker
 This project uses `afl-showmap` for program tracing, so a working installation of AFL or AFL++ is required.
