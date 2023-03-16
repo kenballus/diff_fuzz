@@ -2,3 +2,4 @@ __pycache__/*
 targets/baby-c/baby-c
 targets/baby-cpp/baby-cpp
 traces/*
+inputs/*

@@ -24,3 +24,4 @@ RUN git clone 'https://github.com/AFLplusplus/AFLplusplus' && cd AFLplusplus && 
 USER root
 RUN cd /home/fuzzing_user/AFLplusplus && make install -j$(nproc)
 USER fuzzing_user
+WORKDIR /home/fuzzing_user/diff_fuzz
