@@ -143,7 +143,7 @@ AFLPLUSPLUS_SHOWMAP_STDOUT_FOOTER: bytes = b"\x1b[0;36mafl-showmap"
 
 def normalize_showmap_output(proc: subprocess.Popen, target_config: TargetConfig) -> bytes:
     if proc.stdout is None:
-        return ""
+        return b""
     stdout_bytes = proc.stdout.read()
     if USES_AFLPLUSPLUS:
         return stdout_bytes[: stdout_bytes.index(AFLPLUSPLUS_SHOWMAP_STDOUT_FOOTER)]
