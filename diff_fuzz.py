@@ -196,7 +196,7 @@ def run_executables(
 
     fingerprint = hash(tuple(l))
 
-    statuses: Tuple[int, ...] = tuple(proc.returncode for proc in untraced_procs)
+    statuses: Tuple[int, ...] = tuple(proc.returncode for proc in untraced_procs) if EXIT_STATUSES_MATTER else tuple(proc.returncode != 0 for proc in untraced_procs)
     return fingerprint, statuses, tuple(stdouts)
 
 
@@ -209,7 +209,7 @@ def main() -> None:
 
     # One input `I` produces one trace per program being fuzzed.
     # Convert each trace to a (frozen)set of edges by deduplication.
-    # Pack those sets together in a tuple.
+    # Pack those sets together in a tuple and hash it.
     # This is a fingerprint of the programs' execution on the input `I`.
     # Keep these fingerprints in a set.
     # An input is worth mutation if its fingerprint is new.

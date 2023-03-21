@@ -24,6 +24,11 @@ TIMEOUT_TIME: int = 100000
 # (i.e. the programs you're testing aren't expected to have identical output on stdout)
 OUTPUT_DIFFERENTIALS_MATTER: bool = True
 
+# when this is True, a differential is registered if two targets exit with different status codes.
+# When it's False, a differential is registered only when one target exits with status 0 and another
+# exits with nonzero status.
+EXIT_STATUSES_MATTER: bool = False
+
 # Roughly how many processes to allow in a generation (within a factor of 2)
 ROUGH_DESIRED_QUEUE_LEN: int = 1000
 
