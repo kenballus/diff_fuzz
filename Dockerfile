@@ -8,7 +8,7 @@ RUN mkdir -p /home/fuzzing_user/.local/bin && echo 'PATH=$PATH:/home/fuzzing_use
 
 # Install required packages (must be done as root)
 USER root
-RUN apt -y update && apt -y upgrade && apt -y install git make meson gcc wget pkg-config libglib2.0-dev neovim g++ python3 python3-pip
+RUN apt -y update && apt -y upgrade && apt -y install git make meson gcc wget pkg-config libglib2.0-dev neovim g++ python3 python3-pip python3-tqdm
 USER fuzzing_user
 
 # Download diff_fuzz
