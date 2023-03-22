@@ -17,6 +17,10 @@ import re
 from pathlib import PosixPath
 from enum import Enum
 from typing import List, Dict, Set, FrozenSet, Tuple, Callable, Optional
+try:
+    from tqdm import tqdm
+except ModuleNotFoundError:
+    def tqdm(it, **kwargs): return it
 
 from config import *
 
@@ -219,7 +223,7 @@ def main() -> None:
     exit_status_differentials: List[PosixPath] = []
     output_differentials: List[PosixPath] = []
     try:
-        with multiprocessing.Pool(processes=multiprocessing.cpu_count() // len(TARGET_CONFIGS)) as pool:
+        with multiprocessing.Pool(processes=multiprocessing.cpu_count() // (len(TARGET_CONFIGS) * 2)) as pool:
             while len(input_queue) != 0:  # While there are still inputs to check,
                 print(
                     color(
@@ -228,7 +232,7 @@ def main() -> None:
                     )
                 )
                 # run the programs on the things in the input queue.
-                fingerprints_and_statuses_and_stdouts = pool.map(run_executables, input_queue)
+                fingerprints_and_statuses_and_stdouts = tqdm(pool.imap(run_executables, input_queue), desc="Running targets", total=len(input_queue))
 
                 mutation_candidates: List[PosixPath] = []
                 rejected_candidates: List[PosixPath] = []
