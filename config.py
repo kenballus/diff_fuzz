@@ -5,7 +5,8 @@
 #############################################################################################
 
 from pathlib import PosixPath
-from typing import NamedTuple, List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
+from dataclasses import dataclass, field
 import os
 
 # The directory where the seed inputs are
@@ -32,40 +33,38 @@ EXIT_STATUSES_MATTER: bool = False
 # Roughly how many processes to allow in a generation (within a factor of 2)
 ROUGH_DESIRED_QUEUE_LEN: int = 1000
 
-# AFL++ and AFL differ a little about what goes on stdout and what goes on stderr.
-# Set this flag if you're using AFL++ so that can be handled correctly.
-USES_AFLPLUSPLUS: bool = True
 
-
-class TargetConfig(NamedTuple):
-    executable: PosixPath  # The path to this target's executable
-    cli_args: List[str]  # The CLI arguments this target needs
-    needs_qemu: bool  # Whether this executable needs to run in QEMU mode (is a binary that wasn't compiled with AFL instrumentation)
-    needs_python_afl: bool  # Whether this executable needs to run with python-afl (is a python script)
-    env: Dict[str, str]  # The environment variables to pass to the executable
+@dataclass
+class TargetConfig:
+    # The path to this target's executable
+    executable: PosixPath
+    # The CLI arguments this target needs
+    cli_args: List[str] = field(default_factory=list)
+    # Whether this executable should be traced.
+    # (turning off tracing is useful for untraceable
+    #  oracle targets, such as those written in
+    #  unsupported languages)
+    needs_tracing: bool = True
+    # Whether this executable needs to run in QEMU mode
+    # (should be True when target is not instrumented for AFL)
+    needs_qemu: bool = False
+    # Whether this executable needs to run with python-afl (is a python script)
+    needs_python_afl: bool = False
+    # The environment variables to pass to the executable
+    env: Dict[str, str] = field(default_factory=lambda: dict(os.environ))
 
 
 # Configuration for each fuzzing target
 TARGET_CONFIGS: List[TargetConfig] = [
     TargetConfig(
         executable=PosixPath("./targets/baby-cpp/baby-cpp"),
-        cli_args=[],
-        needs_qemu=False,
-        needs_python_afl=False,
-        env=dict(os.environ),
     ),
     TargetConfig(
         executable=PosixPath("./targets/baby-c/baby-c"),
-        cli_args=[],
         needs_qemu=True,
-        needs_python_afl=False,
-        env=dict(os.environ),
     ),
-    #    TargetConfig(
-    #        executable=PosixPath("./targets/baby-py/baby.py"),
-    #        cli_args=[],
-    #        needs_qemu=False,
-    #        needs_python_afl=True,
-    #        env=dict(os.environ),
-    #    ),
+    # TargetConfig(
+    #     executable=PosixPath("./targets/baby-py/baby.py"),
+    #     needs_python_afl=True,
+    # ),
 ]
