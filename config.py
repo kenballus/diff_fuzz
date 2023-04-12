@@ -19,7 +19,7 @@ SEED_DIR: PosixPath = PosixPath("./seeds")
 TRACE_DIR: PosixPath = PosixPath("./traces")
 
 # Time in milliseconds given to each process
-TIMEOUT_TIME: int = 100000
+TIMEOUT_TIME: int = 10000
 
 # Set this to false if you only care about exit status differentials
 # (i.e. the programs you're testing aren't expected to have identical output on stdout)
