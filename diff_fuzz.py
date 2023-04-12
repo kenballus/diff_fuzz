@@ -248,7 +248,8 @@ def main() -> None:
                     # If we get one program to fail while another succeeds, then we're doing good.
                     if fingerprint not in explored:
                         explored.add(fingerprint)
-                        if len(set(statuses)) != 1:
+                        status_set: Set[int] = set(statuses)
+                        if len(status_set) != 1:
                             print(
                                 color(
                                     Color.blue,
@@ -263,7 +264,7 @@ def main() -> None:
                                     )
                                 )
                             exit_status_differentials.append(current_input)
-                        elif len(set(stdouts)) != 1:
+                        elif status_set == {0} and len(set(stdouts)) != 1:
                             print(
                                 color(
                                     Color.yellow,
