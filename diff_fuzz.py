@@ -275,7 +275,7 @@ def main() -> None:
                                 print(
                                     color(
                                         Color.yellow,
-                                        f"    {str(TARGET_CONFIGS[i].executable)} printed\t{s!r}",
+                                        f"    {str(TARGET_CONFIGS[i].executable)} printed this:\n\t{s!r}",
                                     )
                                 )
                             output_differentials.append(current_input)
