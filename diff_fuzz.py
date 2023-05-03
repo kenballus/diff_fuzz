@@ -167,7 +167,9 @@ def run_executables(
                     )
                 )
         with open(current_input) as input_file:
-            untraced_command_line: List[str] = command_line[command_line.index("--") + 1 :] if target_config.needs_tracing else command_line
+            untraced_command_line: List[str] = (
+                command_line[command_line.index("--") + 1 :] if target_config.needs_tracing else command_line
+            )
             untraced_procs.append(
                 subprocess.Popen(
                     untraced_command_line,
