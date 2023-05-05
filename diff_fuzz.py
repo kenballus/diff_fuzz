@@ -34,6 +34,13 @@ try:
 except:
     print("`grammar.py` not found; disabling grammar-based mutation.", file=sys.stderr)
 
+HAS_NORMALIZATION: bool = False
+try:
+    from normalization import normalize # type: ignore
+    HAS_NORMALIZATION = True
+except:
+    print("`normalization.py not found; disabling stdout normalizers.`", file=sys.stderr)
+
 SEED_INPUTS: List[PosixPath] = list(map(SEED_DIR.joinpath, map(PosixPath, os.listdir(SEED_DIR))))
 
 for tc in TARGET_CONFIGS:
@@ -187,7 +194,10 @@ def run_executables(
     # Extract their stdouts
     stdouts: List[bytes] = []
     for proc, target_config in zip(untraced_procs, TARGET_CONFIGS):
-        stdouts.append(proc.stdout.read() if proc.stdout is not None else b"")
+        stdout_bytes: bytes = proc.stdout.read() if proc.stdout is not None else b""
+        if HAS_NORMALIZATION:
+            stdout_bytes = normalize(stdout_bytes, target_config.encoding)
+        stdouts.append(stdout_bytes)
 
     # Extract their traces
     l = []
