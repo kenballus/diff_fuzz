@@ -30,6 +30,8 @@ EXIT_STATUSES_MATTER: bool = False
 # Roughly how many processes to allow in a generation (within a factor of 2)
 ROUGH_DESIRED_QUEUE_LEN: int = 1000
 
+# The number of bytes deleted at a time in the minimization loop
+# The default choice was selected because of UTF-8.
 DELETION_LENGTHS: List[int] = [4, 3, 2, 1]
 
 

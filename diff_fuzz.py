@@ -139,16 +139,25 @@ def minimize_differential(target_configs: List[TargetConfig], bug_inducing_input
         untraced_tc.needs_tracing = False
         untraced_target_configs.append(untraced_tc)
 
-    _, orig_statuses, _ = run_executables(untraced_target_configs, bug_inducing_input)
+    _, orig_statuses, orig_stdouts = run_executables(untraced_target_configs, bug_inducing_input)
+
+    orig_stdout_comparisons: Tuple[bool, ...] = (True,)
+    if OUTPUT_DIFFERENTIALS_MATTER:
+        orig_stdout_comparisons = tuple(itertools.starmap(bytes.__eq__, itertools.combinations(orig_stdouts, 2)))
+
     result: bytes = bug_inducing_input
 
     for deletion_length in DELETION_LENGTHS:
         while True:
             for reduced_form in (result[:i] + result[i + deletion_length:] for i in range(len(result) - deletion_length + 1)):
-                _, new_statuses, _ = run_executables(untraced_target_configs, reduced_form)
+                _, new_statuses, new_stdouts = run_executables(untraced_target_configs, reduced_form)
                 if new_statuses == orig_statuses:
-                    result = reduced_form
-                    break
+                    new_stdout_comparisons: Tuple[bool, ...] = (True,)
+                    if OUTPUT_DIFFERENTIALS_MATTER:
+                        new_stdout_comparisons = tuple(itertools.starmap(bytes.__eq__, itertools.combinations(new_stdouts, 2)))
+                    if new_stdout_comparisons == orig_stdout_comparisons:
+                        result = reduced_form
+                        break
             else:
                 break
 
@@ -233,6 +242,7 @@ def main(target_configs: List[TargetConfig]) -> None:
     # Keep these fingerprints in a set.
     # An input is worth mutation if its fingerprint is new.
     explored: Set[fingerprint_t] = set()
+    explored_differentials: Set[fingerprint_t] = set()
 
     generation: int = 0
     exit_status_differentials: List[bytes] = []
@@ -264,36 +274,25 @@ def main(target_configs: List[TargetConfig]) -> None:
                     if fingerprint not in explored:
                         explored.add(fingerprint)
                         status_set: Set[int] = set(statuses)
+                        minimized_input: bytes = b""
                         if len(status_set) != 1:
-                            print(
-                                color(
-                                    Color.blue,
-                                    f"Exit Status Differential: {repr(current_input)}",
-                                )
-                            )
-                            for tc, status in zip(target_configs, statuses):
-                                print(
-                                    color(
-                                        Color.red if status else Color.blue,
-                                        f"    Exit status {status if EXIT_STATUSES_MATTER else ('nonzero' if status else '   zero')}:\t{str(tc.executable)}",
-                                    )
-                                )
-                            exit_status_differentials.append(current_input) # TODO: report diff iff minimized version is new
+                            minimized_input = minimize_differential(target_configs, current_input)
+                            minimized_fingerprint, _, _ = run_executables(target_configs, minimized_input)
+                            if minimized_fingerprint not in explored_differentials:
+                                exit_status_differentials.append(current_input)
+                                explored_differentials.add(minimized_fingerprint)
+                                print(color(Color.blue, f"Exit Status Differential: {repr(current_input)}"), file=sys.stderr)
+                                for tc, status in zip(target_configs, statuses):
+                                    print(color(Color.red if status else Color.blue, f"    Exit status {status if EXIT_STATUSES_MATTER else ('nonzero' if status else '   zero')}:\t{str(tc.executable)}"), file=sys.stderr)
                         elif status_set == {0} and len(set(stdouts)) != 1:
-                            print(
-                                color(
-                                    Color.yellow,
-                                    f"Output differential: {repr(current_input)}",
-                                )
-                            )
-                            for tc, s in zip(target_configs, stdouts):
-                                print(
-                                    color(
-                                        Color.yellow,
-                                        f"    {str(tc.executable)} printed this:\n\t{s!r}",
-                                    )
-                                )
-                            output_differentials.append(current_input) # TODO: report diff iff minimized version is new
+                            minimized_input = minimize_differential(target_configs, current_input)
+                            minimized_fingerprint, _, _ = run_executables(target_configs, minimized_input)
+                            if minimized_fingerprint not in explored_differentials:
+                                output_differentials.append(current_input)
+                                explored_differentials.add(minimized_fingerprint)
+                                print(color(Color.yellow, f"Output differential: {repr(current_input)}"), file=sys.stderr)
+                                for tc, s in zip(target_configs, stdouts):
+                                    print(color(Color.yellow, f"    {str(tc.executable)} printed this:\n\t{s!r}"), file=sys.stderr)
                         else:
                             # We don't mutate exit_status_differentials, even if they're new
                             # print(color(Color.yellow, f"New coverage: {str(current_input.resolve())}"))
