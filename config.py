@@ -15,9 +15,6 @@ import os
 # of the inputs accepted by the targets.
 SEED_DIR: PosixPath = PosixPath("./seeds")
 
-# Where program traces end up
-TRACE_DIR: PosixPath = PosixPath("./traces")
-
 # Time in milliseconds given to each process
 TIMEOUT_TIME: int = 10000
 
@@ -32,6 +29,8 @@ EXIT_STATUSES_MATTER: bool = False
 
 # Roughly how many processes to allow in a generation (within a factor of 2)
 ROUGH_DESIRED_QUEUE_LEN: int = 1000
+
+DELETION_LENGTHS: List[int] = [4, 3, 2, 1]
 
 
 @dataclass
