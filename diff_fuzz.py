@@ -279,18 +279,18 @@ def main(target_configs: List[TargetConfig]) -> None:
                             minimized_input = minimize_differential(target_configs, current_input)
                             minimized_fingerprint, _, _ = run_executables(target_configs, minimized_input)
                             if minimized_fingerprint not in explored_differentials:
-                                exit_status_differentials.append(current_input)
+                                exit_status_differentials.append(minimized_input)
                                 explored_differentials.add(minimized_fingerprint)
-                                print(color(Color.blue, f"Exit Status Differential: {repr(current_input)}"), file=sys.stderr)
+                                print(color(Color.blue, f"Exit Status Differential: {repr(minimized_input)}"), file=sys.stderr)
                                 for tc, status in zip(target_configs, statuses):
                                     print(color(Color.red if status else Color.blue, f"    Exit status {status if EXIT_STATUSES_MATTER else ('nonzero' if status else '   zero')}:\t{str(tc.executable)}"), file=sys.stderr)
                         elif status_set == {0} and len(set(stdouts)) != 1:
                             minimized_input = minimize_differential(target_configs, current_input)
                             minimized_fingerprint, _, _ = run_executables(target_configs, minimized_input)
                             if minimized_fingerprint not in explored_differentials:
-                                output_differentials.append(current_input)
+                                output_differentials.append(minimized_input)
                                 explored_differentials.add(minimized_fingerprint)
-                                print(color(Color.yellow, f"Output differential: {repr(current_input)}"), file=sys.stderr)
+                                print(color(Color.yellow, f"Output differential: {repr(minimized_input)}"), file=sys.stderr)
                                 for tc, s in zip(target_configs, stdouts):
                                     print(color(Color.yellow, f"    {str(tc.executable)} printed this:\n\t{s!r}"), file=sys.stderr)
                         else:
