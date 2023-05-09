@@ -15,7 +15,6 @@ import copy
 import os
 import re
 from pathlib import PosixPath
-from enum import Enum
 from typing import List, Set, FrozenSet, Tuple, Callable
 
 try:
@@ -261,13 +260,7 @@ def main(target_configs: List[config.TargetConfig]) -> None:
     differentials: List[bytes] = []
 
     while len(input_queue) != 0:  # While there are still inputs to check,
-        print(
-            color(
-                Color.GREEN,
-                f"Starting generation {generation}.",
-            ),
-            file=sys.stderr,
-        )
+        print(f"Starting generation {generation}.", file=sys.stderr)
         with multiprocessing.Pool(processes=os.cpu_count()) as pool:
             # run the programs on the things in the input queue.
             fingerprints_and_statuses_and_stdouts = tqdm(
@@ -300,12 +293,9 @@ def main(target_configs: List[config.TargetConfig]) -> None:
             input_queue += list(map(mutate_input, mutation_candidates))
 
         print(
-            color(
-                Color.GREEN,
-                f"End of generation {generation}.\n"
-                + f"Differentials:\t\t{len(differentials)}\n"
-                + f"Mutation candidates:\t{len(mutation_candidates)}",
-            ),
+            f"End of generation {generation}.\n"
+            + f"Differentials:\t\t{len(differentials)}\n"
+            + f"Mutation candidates:\t{len(mutation_candidates)}",
             file=sys.stderr,
         )
         generation += 1
@@ -315,28 +305,6 @@ def main(target_configs: List[config.TargetConfig]) -> None:
         print("\n".join(repr(b) for b in differentials))
     else:
         print("No differentials found! Try increasing config.ROUGH_DESIRED_QUEUE_LEN.", file=sys.stderr)
-
-
-# For pretty printing
-class Color(Enum):
-    RED = 0
-    BLUE = 1
-    GREEN = 2
-    YELLOW = 3
-    GREY = 4
-    NONE = 5
-
-
-def color(c: Color, s: str):
-    color_codes = {
-        Color.RED: "\033[0;31m",
-        Color.BLUE: "\033[0;34m",
-        Color.GREEN: "\033[0;32m",
-        Color.YELLOW: "\033[0;33m",
-        Color.GREY: "\033[0;90m",
-        Color.NONE: "\033[0m",
-    }
-    return color_codes[c] + s + color_codes[Color.NONE]
 
 
 if __name__ == "__main__":
