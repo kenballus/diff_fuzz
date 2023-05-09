@@ -5,7 +5,7 @@
 #############################################################################################
 
 from pathlib import PosixPath
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict
 from dataclasses import dataclass, field
 import os
 
@@ -16,7 +16,7 @@ import os
 SEED_DIR: PosixPath = PosixPath("./seeds")
 
 # Time in milliseconds given to each process
-TIMEOUT_TIME: int = 10000
+TIMEOUT_TIME: int = 5000
 
 # Set this to false if you only care about exit status differentials
 # (i.e. the programs you're testing aren't expected to have identical output on stdout)
@@ -28,7 +28,7 @@ OUTPUT_DIFFERENTIALS_MATTER: bool = True
 EXIT_STATUSES_MATTER: bool = False
 
 # Roughly how many processes to allow in a generation (within a factor of 2)
-ROUGH_DESIRED_QUEUE_LEN: int = 1000
+ROUGH_DESIRED_QUEUE_LEN: int = 100
 
 # The number of bytes deleted at a time in the minimization loop
 # The default choice was selected because of UTF-8.
@@ -55,7 +55,8 @@ class TargetConfig:
     env: Dict[str, str] = field(default_factory=lambda: dict(os.environ))
     # The character encoding that this program uses for its output
     # (useful for normalization)
-    encoding: str = 'UTF-8'
+    encoding: str = "UTF-8"
+
 
 # Configuration for each fuzzing target
 TARGET_CONFIGS: List[TargetConfig] = [
