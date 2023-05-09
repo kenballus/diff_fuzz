@@ -35,7 +35,7 @@ ROUGH_DESIRED_QUEUE_LEN: int = 100
 DELETION_LENGTHS: List[int] = [4, 3, 2, 1]
 
 
-@dataclass
+@dataclass(frozen=True)
 class TargetConfig:
     # The path to this target's executable
     executable: PosixPath

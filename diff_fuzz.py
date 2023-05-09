@@ -161,7 +161,7 @@ def minimize_differential(bug_inducing_input: bytes) -> bytes:
 
     return result
 
-
+@functools.lru_cache
 def run_executables(
     current_input: bytes, disable_tracing: bool = False
 ) -> Tuple[fingerprint_t, Tuple[int, ...], Tuple[bytes, ...]]:
