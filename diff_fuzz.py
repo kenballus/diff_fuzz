@@ -132,7 +132,6 @@ def make_command_line(tc: config.TargetConfig) -> List[str]:
 
 
 def minimize_differential(target_configs: List[config.TargetConfig], bug_inducing_input: bytes) -> bytes:
-    print("Minimizing...")
     untraced_target_configs: List[config.TargetConfig] = []
     for tc in target_configs:
         untraced_tc = copy.copy(tc)  # In the future, might need deepcopy
@@ -167,7 +166,6 @@ def minimize_differential(target_configs: List[config.TargetConfig], bug_inducin
             else:
                 break
 
-    print("Done!")
     return result
 
 
@@ -272,7 +270,7 @@ def main(target_configs: List[config.TargetConfig]) -> None:
         )
         with multiprocessing.Pool(processes=os.cpu_count()) as pool:
             # run the programs on the things in the input queue.
-            fingerprints_and_statuses_and_stdouts = tqdm(
+            fingerprints, statuses, stdouts = tqdm(
                 pool.imap(functools.partial(run_executables, target_configs), input_queue),
                 desc="Running targets",
                 total=len(input_queue),
@@ -280,24 +278,18 @@ def main(target_configs: List[config.TargetConfig]) -> None:
 
             mutation_candidates: List[bytes] = []
 
-            for current_input, (fingerprint, statuses, stdouts) in zip(
-                input_queue, fingerprints_and_statuses_and_stdouts
+            for current_input, fingerprint, statuses, stdouts in zip(
+                input_queue, fingerprints, statuses, stdouts
             ):
                 # If we found something new, mutate it and add its children to the input queue
                 # If we get one program to fail while another succeeds, then we're doing good.
                 if fingerprint not in fingerprints:
                     fingerprints.add(fingerprint)
-                    print("Encountered new fingerprint!")
-                    print(fingerprint)
                     status_set: Set[int] = set(statuses)
                     if (len(status_set) != 1) or (status_set == {0} and len(set(stdouts)) != 1):
-                        print("Encountered a differential!")
-                        print(repr(current_input))
                         minimized_input: bytes = minimize_differential(target_configs, current_input)
                         minimized_fingerprint, _, _ = run_executables(target_configs, minimized_input)
                         if minimized_fingerprint not in minimized_fingerprints:
-                            print(color(Color.GREEN, "Encountered a new differential!"))
-                            print(repr(minimized_input))
                             differentials.append(minimized_input)
                             minimized_fingerprints.add(minimized_fingerprint)
                     else:
