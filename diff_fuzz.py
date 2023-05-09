@@ -11,7 +11,6 @@ import multiprocessing
 import random
 import functools
 import itertools
-import copy
 import os
 import re
 from pathlib import PosixPath
@@ -130,14 +129,8 @@ def make_command_line(tc: config.TargetConfig) -> List[str]:
     return command_line
 
 
-def minimize_differential(target_configs: List[config.TargetConfig], bug_inducing_input: bytes) -> bytes:
-    untraced_target_configs: List[config.TargetConfig] = []
-    for tc in target_configs:
-        untraced_tc = copy.copy(tc)  # In the future, might need deepcopy
-        untraced_tc.needs_tracing = False
-        untraced_target_configs.append(untraced_tc)
-
-    _, orig_statuses, orig_stdouts = run_executables(untraced_target_configs, bug_inducing_input)
+def minimize_differential(bug_inducing_input: bytes) -> bytes:
+    _, orig_statuses, orig_stdouts = run_executables(bug_inducing_input, disable_tracing=True)
 
     orig_stdout_comparisons: Tuple[bool, ...] = (True,)
     if config.OUTPUT_DIFFERENTIALS_MATTER:
@@ -150,9 +143,17 @@ def minimize_differential(target_configs: List[config.TargetConfig], bug_inducin
     for deletion_length in config.DELETION_LENGTHS:
         i: int = len(result) - deletion_length
         while i > 0:
-            reduced_form: bytes = result[:i] + result[i + deletion_length:]
-            _, new_statuses, new_stdouts = run_executables(untraced_target_configs, reduced_form)
-            if new_statuses == orig_statuses and (tuple(itertools.starmap(bytes.__eq__, itertools.combinations(new_stdouts, 2))) if config.OUTPUT_DIFFERENTIALS_MATTER else (True,)) == orig_stdout_comparisons:
+            reduced_form: bytes = result[:i] + result[i + deletion_length :]
+            _, new_statuses, new_stdouts = run_executables(reduced_form)
+            if (
+                new_statuses == orig_statuses
+                and (
+                    tuple(itertools.starmap(bytes.__eq__, itertools.combinations(new_stdouts, 2)))
+                    if config.OUTPUT_DIFFERENTIALS_MATTER
+                    else (True,)
+                )
+                == orig_stdout_comparisons
+            ):
                 result = reduced_form
                 i -= deletion_length
             else:
@@ -162,16 +163,16 @@ def minimize_differential(target_configs: List[config.TargetConfig], bug_inducin
 
 
 def run_executables(
-    target_configs: List[config.TargetConfig], current_input: bytes
+    current_input: bytes, disable_tracing: bool = False
 ) -> Tuple[fingerprint_t, Tuple[int, ...], Tuple[bytes, ...]]:
     traced_procs: List[subprocess.Popen | None] = []
 
     # We need these to extract exit statuses and stdouts
     untraced_procs: List[subprocess.Popen] = []
 
-    for tc in target_configs:
+    for tc in config.TARGET_CONFIGS:
         command_line: List[str] = make_command_line(tc)
-        if tc.needs_tracing:
+        if not disable_tracing and tc.needs_tracing:
             traced_proc: subprocess.Popen = subprocess.Popen(
                 command_line,
                 stdin=subprocess.PIPE,
@@ -208,14 +209,14 @@ def run_executables(
 
     # Extract their stdouts
     stdouts: List[bytes] = []
-    for proc, tc in zip(untraced_procs, target_configs):
+    for proc, tc in zip(untraced_procs, config.TARGET_CONFIGS):
         stdout_bytes: bytes = proc.stdout.read() if proc.stdout is not None else b""
         stdout_bytes = normalize(stdout_bytes, tc.encoding)
         stdouts.append(stdout_bytes)
 
     # Extract their traces
     traces: List[FrozenSet[int]] = []
-    for tc, proc in zip(target_configs, traced_procs):
+    for tc, proc in zip(config.TARGET_CONFIGS, traced_procs):
         traces.append(
             parse_tracer_output(proc.stdout.read() if proc is not None and proc.stdout is not None else b"")
         )
@@ -230,7 +231,7 @@ def run_executables(
     return fingerprint, statuses, tuple(stdouts)
 
 
-def main(target_configs: List[config.TargetConfig]) -> None:
+def main() -> None:
     if len(sys.argv) > 2:
         print(f"Usage: python3 {sys.argv[0]}", file=sys.stderr)
         sys.exit(1)
@@ -257,7 +258,7 @@ def main(target_configs: List[config.TargetConfig]) -> None:
         with multiprocessing.Pool(processes=os.cpu_count()) as pool:
             # run the programs on the things in the input queue.
             fingerprints_and_statuses_and_stdouts = tqdm(
-                pool.imap(functools.partial(run_executables, target_configs), input_queue),
+                pool.imap(run_executables, input_queue),
                 desc="Running targets",
                 total=len(input_queue),
             )
@@ -273,8 +274,8 @@ def main(target_configs: List[config.TargetConfig]) -> None:
                     fingerprints.add(fingerprint)
                     status_set: Set[int] = set(statuses)
                     if (len(status_set) != 1) or (status_set == {0} and len(set(stdouts)) != 1):
-                        minimized_input: bytes = minimize_differential(target_configs, current_input)
-                        minimized_fingerprint, _, _ = run_executables(target_configs, minimized_input)
+                        minimized_input: bytes = minimize_differential(current_input)
+                        minimized_fingerprint, _, _ = run_executables(minimized_input)
                         if minimized_fingerprint not in minimized_fingerprints:
                             differentials.append(minimized_input)
                             minimized_fingerprints.add(minimized_fingerprint)
@@ -301,4 +302,4 @@ def main(target_configs: List[config.TargetConfig]) -> None:
 
 
 if __name__ == "__main__":
-    main(config.TARGET_CONFIGS)
+    main()
