@@ -148,22 +148,15 @@ def minimize_differential(target_configs: List[config.TargetConfig], bug_inducin
     result: bytes = bug_inducing_input
 
     for deletion_length in config.DELETION_LENGTHS:
-        while True:
-            for reduced_form in (
-                result[:i] + result[i + deletion_length :] for i in range(len(result) - deletion_length + 1)
-            ):
-                _, new_statuses, new_stdouts = run_executables(untraced_target_configs, reduced_form)
-                if new_statuses == orig_statuses:
-                    new_stdout_comparisons: Tuple[bool, ...] = (True,)
-                    if config.OUTPUT_DIFFERENTIALS_MATTER:
-                        new_stdout_comparisons = tuple(
-                            itertools.starmap(bytes.__eq__, itertools.combinations(new_stdouts, 2))
-                        )
-                    if new_stdout_comparisons == orig_stdout_comparisons:
-                        result = reduced_form
-                        break
+        i: int = len(result) - deletion_length
+        while i > 0:
+            reduced_form: bytes = result[:i] + result[i + deletion_length:]
+            _, new_statuses, new_stdouts = run_executables(untraced_target_configs, reduced_form)
+            if new_statuses == orig_statuses and (tuple(itertools.starmap(bytes.__eq__, itertools.combinations(new_stdouts, 2))) if config.OUTPUT_DIFFERENTIALS_MATTER else (True,)) == orig_stdout_comparisons:
+                result = reduced_form
+                i -= deletion_length
             else:
-                break
+                i -= 1
 
     return result
 
@@ -232,7 +225,7 @@ def run_executables(
     statuses: Tuple[int, ...] = (
         tuple(proc.returncode for proc in untraced_procs)
         if config.EXIT_STATUSES_MATTER
-        else tuple(proc.returncode != 0 for proc in untraced_procs)
+        else tuple(int(proc.returncode != 0) for proc in untraced_procs)
     )
     return fingerprint, statuses, tuple(stdouts)
 
