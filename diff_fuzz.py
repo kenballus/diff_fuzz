@@ -270,7 +270,7 @@ def main(target_configs: List[config.TargetConfig]) -> None:
         )
         with multiprocessing.Pool(processes=os.cpu_count()) as pool:
             # run the programs on the things in the input queue.
-            fingerprints, statuses, stdouts = tqdm(
+            fingerprints_and_statuses_and_stdouts = tqdm(
                 pool.imap(functools.partial(run_executables, target_configs), input_queue),
                 desc="Running targets",
                 total=len(input_queue),
@@ -278,8 +278,8 @@ def main(target_configs: List[config.TargetConfig]) -> None:
 
             mutation_candidates: List[bytes] = []
 
-            for current_input, fingerprint, statuses, stdouts in zip(
-                input_queue, fingerprints, statuses, stdouts
+            for current_input, (fingerprint, statuses, stdouts) in zip(
+                input_queue, fingerprints_and_statuses_and_stdouts
             ):
                 # If we found something new, mutate it and add its children to the input queue
                 # If we get one program to fail while another succeeds, then we're doing good.
