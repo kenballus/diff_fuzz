@@ -20,7 +20,7 @@ TIMEOUT_TIME: int = 5000
 
 # Set this to false if you only care about exit status differentials
 # (i.e. the programs you're testing aren't expected to have identical output on stdout)
-OUTPUT_DIFFERENTIALS_MATTER: bool = True
+OUTPUT_DIFFERENTIALS_MATTER: bool = False
 
 # when this is True, a differential is registered if two targets exit with different status codes.
 # When it's False, a differential is registered only when one target exits with status 0 and another
@@ -33,6 +33,15 @@ ROUGH_DESIRED_QUEUE_LEN: int = 100
 # The number of bytes deleted at a time in the minimization loop
 # The default choice was selected because of UTF-8.
 DELETION_LENGTHS: List[int] = [4, 3, 2, 1]
+
+
+# This is the parse tree class for your programs' output.
+# If OUTPUT_DIFFERENTIALS_MATTER is set to False, then you can leave this as it is.
+# Otherwise, it should have a `str` field for each field in your programs'
+# output JSON.
+@dataclass(frozen=True)
+class ParseTree:
+    pass
 
 
 @dataclass(frozen=True)
