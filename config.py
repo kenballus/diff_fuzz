@@ -37,7 +37,7 @@ DELETION_LENGTHS: List[int] = [4, 3, 2, 1]
 
 # This is the parse tree class for your programs' output.
 # If OUTPUT_DIFFERENTIALS_MATTER is set to False, then you can leave this as it is.
-# Otherwise, it should have a `str` field for each field in your programs'
+# Otherwise, it should have a `bytes` field for each field in your programs'
 # output JSON.
 @dataclass(frozen=True)
 class ParseTree:

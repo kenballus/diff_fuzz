@@ -16,8 +16,7 @@ import re
 import json
 from dataclasses import fields
 from pathlib import PosixPath
-from typing import List, Set, FrozenSet, Tuple, Callable
-from collections import namedtuple
+from typing import List, Set, FrozenSet, Tuple, Callable, Any
 
 try:
     from tqdm import tqdm  # type: ignore
@@ -34,6 +33,7 @@ from config import (
     OUTPUT_DIFFERENTIALS_MATTER,
     EXIT_STATUSES_MATTER,
     DELETION_LENGTHS,
+    RESULTS_DIR,
 )
 
 HAS_GRAMMAR: bool = False
@@ -49,17 +49,19 @@ try:
     from normalization import normalize  # type: ignore
 except ModuleNotFoundError:
     print("`normalization.py` not found; disabling normalizers.", file=sys.stderr)
-    normalize = lambda x, _: x  # type: ignore
+    normalize = lambda x: x  # type: ignore
 
 assert SEED_DIR.is_dir()
 SEED_INPUTS: List[PosixPath] = list(map(lambda s: SEED_DIR.joinpath(PosixPath(s)), os.listdir(SEED_DIR)))
+
+assert RESULTS_DIR.is_dir()
 
 assert all(map(lambda tc: tc.executable.exists(), TARGET_CONFIGS))
 
 fingerprint_t = Tuple[FrozenSet[int], ...]
 
 
-def grammar_mutate(m: re.Match, _: bytes) -> bytes:
+def grammar_mutate(m: re.Match, _: Any) -> bytes:
     # This function takes _ so it can have the same
     # signature as the other mutators after currying with m,
     # even though _ is ignored.
@@ -90,7 +92,7 @@ def byte_delete(b: bytes) -> bytes:
     return b[:index] + b[index + 1 :]
 
 
-def mutate_input(b: bytes) -> bytes:
+def mutate(b: bytes) -> bytes:
     mutators: List[Callable[[bytes], bytes]] = [byte_insert]
     if len(b) > 0:
         mutators.append(byte_change)
@@ -140,22 +142,26 @@ def make_command_line(tc: TargetConfig) -> List[str]:
     return command_line
 
 
-def field_cmp(t1: ParseTree, t2: ParseTree) -> Tuple[bool, ...]:
-    return tuple(
-        getattr(ParseTree, field.name) == getattr(ParseTree, field.name) for field in fields(ParseTree)
+def field_cmp(t1: ParseTree | None, t2: ParseTree | None) -> Tuple[bool, ...]:
+    return (
+        (True,)
+        if t1 is t2 is None
+        else (
+            (False,)
+            if t1 is None or t2 is None
+            else tuple(getattr(t1, field.name) == getattr(t2, field.name) for field in fields(ParseTree))
+        )
     )
 
 
 def minimize_differential(bug_inducing_input: bytes) -> bytes:
     _, orig_statuses, orig_parse_trees = run_executables(bug_inducing_input, disable_tracing=True)
 
-    orig_parse_tree_comparisons: List[Tuple[bool, ...]] = [
-        (True,),
-    ]
-    if OUTPUT_DIFFERENTIALS_MATTER:
-        orig_parse_tree_comparisons = list(
-            itertools.starmap(field_cmp, itertools.combinations(orig_parse_trees, 2))
-        )
+    orig_parse_tree_comparisons: List[Tuple[bool, ...]] = (
+        list(itertools.starmap(field_cmp, itertools.combinations(orig_parse_trees, 2)))
+        if OUTPUT_DIFFERENTIALS_MATTER
+        else [(True,)]
+    )
 
     result: bytes = bug_inducing_input
 
@@ -169,9 +175,7 @@ def minimize_differential(bug_inducing_input: bytes) -> bytes:
                 and (
                     list(itertools.starmap(field_cmp, itertools.combinations(new_parse_trees, 2)))
                     if OUTPUT_DIFFERENTIALS_MATTER
-                    else [
-                        (True,),
-                    ]
+                    else [(True,)]
                 )
                 == orig_parse_tree_comparisons
             ):
@@ -186,7 +190,7 @@ def minimize_differential(bug_inducing_input: bytes) -> bytes:
 @functools.lru_cache
 def run_executables(
     current_input: bytes, disable_tracing: bool = False
-) -> Tuple[fingerprint_t, Tuple[int, ...], Tuple[ParseTree, ...]]:
+) -> Tuple[fingerprint_t, Tuple[int, ...], Tuple[ParseTree | None, ...]]:
     traced_procs: List[subprocess.Popen | None] = []
 
     # We need these to extract exit statuses and parse_trees
@@ -229,33 +233,36 @@ def run_executables(
         if proc is not None:
             proc.wait()
 
-    # Extract their parse trees
-    parse_trees: List[ParseTree] = [
-        ParseTree(**(json.loads(proc.stdout.read()) if proc.stdout is not None else {}))
-        for proc in untraced_procs
-    ]
-
-    # Extract their traces
-    traces: List[FrozenSet[int]] = []
-    for tc, proc in zip(TARGET_CONFIGS, traced_procs):
-        traces.append(
-            parse_tracer_output(proc.stdout.read() if proc is not None and proc.stdout is not None else b"")
-        )
-
-    fingerprint: fingerprint_t = tuple(traces)
-
+    # Extract their exit statuses
     statuses: Tuple[int, ...] = (
         tuple(proc.returncode for proc in untraced_procs)
         if EXIT_STATUSES_MATTER
-        else tuple(int(proc.returncode != 0) for proc in untraced_procs)
+        else tuple(int(proc.returncode) for proc in untraced_procs)
     )
-    return fingerprint, statuses, tuple(parse_trees)
+
+    # Extract their parse trees
+    parse_trees: List[ParseTree | None] = [
+        normalize(ParseTree(**{k: v.encode(tc.encoding) for k, v in json.loads(proc.stdout.read()).items()}))
+        if proc.stdout is not None and status == 0
+        else None
+        for proc, status, tc in zip(untraced_procs, statuses, TARGET_CONFIGS)
+    ]
+
+    # Extract their traces
+    trace_sets: List[FrozenSet[int]] = [
+        parse_tracer_output(proc.stdout.read())
+        if proc is not None and proc.stdout is not None
+        else frozenset()
+        for proc in traced_procs
+    ]
+
+    return tuple(trace_sets), statuses, tuple(parse_trees)
 
 
-def main() -> None:
-    if len(sys.argv) > 2:
-        print(f"Usage: python3 {sys.argv[0]}", file=sys.stderr)
-        sys.exit(1)
+def main(minimized_differentials: List[bytes]) -> None:
+    # We take minimized_differentials as an argument because we want
+    # it to persist even if this function has an uncaught exception.
+    assert len(minimized_differentials) == 0
 
     input_queue: List[bytes] = []
     for seed_input in SEED_INPUTS:
@@ -269,13 +276,19 @@ def main() -> None:
     # Keep these fingerprints in a set.
     # An input is worth mutation if its fingerprint is new.
     fingerprints: Set[fingerprint_t] = set()
+
+    # This is the set of fingerprints that correspond with minimized differentials.
+    # Whenever we minimize a differential into an input with a fingerprint not in this set,
+    # we report it and add it to this set.
     minimized_fingerprints: Set[fingerprint_t] = set()
 
     generation: int = 0
-    differentials: List[bytes] = []
 
     while len(input_queue) != 0:  # While there are still inputs to check,
         print(f"Starting generation {generation}.", file=sys.stderr)
+        mutation_candidates: List[bytes] = []
+        differentials: List[bytes] = []
+
         with multiprocessing.Pool(processes=os.cpu_count()) as pool:
             # run the programs on the things in the input queue.
             fingerprint_and_statuses_and_parse_trees = tqdm(
@@ -283,8 +296,6 @@ def main() -> None:
                 desc="Running targets",
                 total=len(input_queue),
             )
-
-            mutation_candidates: List[bytes] = []
 
             for current_input, (fingerprint, statuses, parse_trees) in zip(
                 input_queue, fingerprint_and_statuses_and_parse_trees
@@ -295,32 +306,54 @@ def main() -> None:
                     fingerprints.add(fingerprint)
                     status_set: Set[int] = set(statuses)
                     if (len(status_set) != 1) or (status_set == {0} and len(set(parse_trees)) != 1):
-                        minimized_input: bytes = minimize_differential(current_input)
-                        minimized_fingerprint, _, _ = run_executables(minimized_input)
-                        if minimized_fingerprint not in minimized_fingerprints:
-                            differentials.append(minimized_input)
-                            minimized_fingerprints.add(minimized_fingerprint)
+                        differentials.append(current_input)
                     else:
                         mutation_candidates.append(current_input)
 
+        # Minimize all the found differentials
+        with multiprocessing.Pool(processes=os.cpu_count()) as pool:
+            minimized_inputs = tqdm(
+                pool.imap(minimize_differential, differentials),
+                desc="Minimizing differentials",
+                total=len(differentials),
+            )
+            for minimized_input in minimized_inputs:
+                minimized_fingerprint, _, _ = run_executables(minimized_input)
+                if minimized_fingerprint not in minimized_fingerprints:
+                    minimized_differentials.append(minimized_input)
+                    minimized_fingerprints.add(minimized_fingerprint)
+
         input_queue.clear()
         while len(mutation_candidates) != 0 and len(input_queue) < ROUGH_DESIRED_QUEUE_LEN:
-            input_queue += list(map(mutate_input, mutation_candidates))
+            input_queue += list(map(mutate, mutation_candidates))
 
         print(
             f"End of generation {generation}.\n"
-            + f"Differentials:\t\t{len(differentials)}\n"
+            + f"Differentials:\t\t{len(minimized_differentials)}\n"
             + f"Mutation candidates:\t{len(mutation_candidates)}",
             file=sys.stderr,
         )
         generation += 1
 
-    if len(differentials) != 0:
+
+if __name__ == "__main__":
+    if len(sys.argv) > 2:
+        print(f"Usage: python3 {sys.argv[0]}", file=sys.stderr)
+        sys.exit(1)
+
+    final_results: List[bytes] = []
+    try:
+        main(final_results)
+    except KeyboardInterrupt:
+        pass
+
+    if len(final_results) != 0:
         print("Differentials:", file=sys.stderr)
-        print("\n".join(repr(b) for b in differentials))
+        print("\n".join(repr(b) for b in final_results))
     else:
         print("No differentials found! Try increasing ROUGH_DESIRED_QUEUE_LEN.", file=sys.stderr)
 
-
-if __name__ == "__main__":
-    main()
+    run_id: int = random.randint(0, 1 << 31)
+    for ctr, final_result in enumerate(final_results):
+        with open(RESULTS_DIR.joinpath(f"{run_id}_result_{ctr}"), "wb") as result_file:
+            result_file.write(final_result)
