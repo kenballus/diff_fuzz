@@ -9,6 +9,7 @@ import sys
 import subprocess
 import multiprocessing
 import random
+import uuid
 import functools
 import itertools
 import os
@@ -30,20 +31,21 @@ from config import (
     TARGET_CONFIGS,
     ROUGH_DESIRED_QUEUE_LEN,
     SEED_DIR,
-    OUTPUT_DIFFERENTIALS_MATTER,
-    EXIT_STATUSES_MATTER,
+    DETECT_OUTPUT_DIFFERENTIALS,
+    DIFFERENTIATE_NONZERO_EXIT_STATUSES,
     DELETION_LENGTHS,
     RESULTS_DIR,
+    USE_GRAMMAR_MUTATIONS,
 )
 
-HAS_GRAMMAR: bool = False
-try:
-    from grammar import generate_random_matching_input, grammar_re, grammar_dict  # type: ignore
-
-    print("Importing grammar from `grammar.py`.", file=sys.stderr)
-    HAS_GRAMMAR = True
-except ModuleNotFoundError:
-    print("`grammar.py` not found; disabling grammar-based mutation.", file=sys.stderr)
+if USE_GRAMMAR_MUTATIONS:
+    try:
+        from grammar import generate_random_matching_input, grammar_re, grammar_dict  # type: ignore
+    except ModuleNotFoundError:
+        print(
+            "`grammar.py` not found. Either make one or set USE_GRAMMAR_MUTATIONS to False", file=sys.stderr
+        )
+        sys.exit(1)
 
 try:
     from normalization import normalize  # type: ignore
@@ -98,7 +100,7 @@ def mutate(b: bytes) -> bytes:
         mutators.append(byte_change)
     if len(b) > 1:
         mutators.append(byte_delete)
-    if HAS_GRAMMAR:
+    if USE_GRAMMAR_MUTATIONS:
         try:
             m: re.Match | None = re.match(grammar_re, str(b, "UTF-8"))
             if m is not None:
@@ -157,9 +159,11 @@ def field_cmp(t1: ParseTree | None, t2: ParseTree | None) -> Tuple[bool, ...]:
 def minimize_differential(bug_inducing_input: bytes) -> bytes:
     _, orig_statuses, orig_parse_trees = run_executables(bug_inducing_input, disable_tracing=True)
 
+    needs_parse_tree_comparison: bool = len(set(orig_statuses)) == 1
+
     orig_parse_tree_comparisons: List[Tuple[bool, ...]] = (
         list(itertools.starmap(field_cmp, itertools.combinations(orig_parse_trees, 2)))
-        if OUTPUT_DIFFERENTIALS_MATTER
+        if needs_parse_tree_comparison
         else [(True,)]
     )
 
@@ -167,14 +171,14 @@ def minimize_differential(bug_inducing_input: bytes) -> bytes:
 
     for deletion_length in DELETION_LENGTHS:
         i: int = len(result) - deletion_length
-        while i > 0:
+        while i >= 0:
             reduced_form: bytes = result[:i] + result[i + deletion_length :]
             _, new_statuses, new_parse_trees = run_executables(reduced_form)
             if (
                 new_statuses == orig_statuses
                 and (
                     list(itertools.starmap(field_cmp, itertools.combinations(new_parse_trees, 2)))
-                    if OUTPUT_DIFFERENTIALS_MATTER
+                    if needs_parse_tree_comparison
                     else [(True,)]
                 )
                 == orig_parse_tree_comparisons
@@ -219,7 +223,7 @@ def run_executables(
         untraced_proc: subprocess.Popen = subprocess.Popen(
             untraced_command_line,
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE if OUTPUT_DIFFERENTIALS_MATTER else subprocess.DEVNULL,
+            stdout=subprocess.PIPE if DETECT_OUTPUT_DIFFERENTIALS else subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             env=tc.env,
         )
@@ -236,7 +240,7 @@ def run_executables(
     # Extract their exit statuses
     statuses: Tuple[int, ...] = (
         tuple(proc.returncode for proc in untraced_procs)
-        if EXIT_STATUSES_MATTER
+        if DIFFERENTIATE_NONZERO_EXIT_STATUSES
         else tuple(int(proc.returncode) for proc in untraced_procs)
     )
 
@@ -305,13 +309,13 @@ def main(minimized_differentials: List[bytes]) -> None:
                 if fingerprint not in fingerprints:
                     fingerprints.add(fingerprint)
                     status_set: Set[int] = set(statuses)
-                    if (len(status_set) != 1) or (status_set == {0} and len(set(parse_trees)) != 1):
+                    if (len(status_set) != 1) or (
+                        DETECT_OUTPUT_DIFFERENTIALS and status_set == {0} and len(set(parse_trees)) != 1
+                    ):
                         differentials.append(current_input)
                     else:
                         mutation_candidates.append(current_input)
 
-        # Minimize all the found differentials
-        with multiprocessing.Pool(processes=os.cpu_count()) as pool:
             minimized_inputs = tqdm(
                 pool.imap(minimize_differential, differentials),
                 desc="Minimizing differentials",
@@ -353,7 +357,8 @@ if __name__ == "__main__":
     else:
         print("No differentials found! Try increasing ROUGH_DESIRED_QUEUE_LEN.", file=sys.stderr)
 
-    run_id: int = random.randint(0, 1 << 31)
+    run_id: str = str(uuid.uuid4())
+    os.mkdir(RESULTS_DIR.joinpath(run_id))
     for ctr, final_result in enumerate(final_results):
-        with open(RESULTS_DIR.joinpath(f"{run_id}_result_{ctr}"), "wb") as result_file:
+        with open(RESULTS_DIR.joinpath(run_id).joinpath("differential_{ctr}"), "wb") as result_file:
             result_file.write(final_result)

@@ -15,17 +15,24 @@ import os
 # of the inputs accepted by the targets.
 SEED_DIR: PosixPath = PosixPath("./seeds")
 
+# The directory where the findings go when the fuzzer run finishes.
+RESULTS_DIR: PosixPath = PosixPath("./results")
+
 # Time in milliseconds given to each process
-TIMEOUT_TIME: int = 5000
+TIMEOUT_TIME: int = 10000
 
 # Set this to false if you only care about exit status differentials
 # (i.e. the programs you're testing aren't expected to have identical output on stdout)
-OUTPUT_DIFFERENTIALS_MATTER: bool = False
+DETECT_OUTPUT_DIFFERENTIALS: bool = False
 
-# when this is True, a differential is registered if two targets exit with different status codes.
+# Set this to True if you want to use grammar mutations.
+# (Requires a grammar.py with the appropriate interface)
+USE_GRAMMAR_MUTATIONS: bool = True
+
+# When this is True, a differential is registered if two targets exit with different status codes.
 # When it's False, a differential is registered only when one target exits with status 0 and another
 # exits with nonzero status.
-EXIT_STATUSES_MATTER: bool = False
+DIFFERENTIATE_NONZERO_EXIT_STATUSES: bool = False
 
 # Roughly how many processes to allow in a generation (within a factor of 2)
 ROUGH_DESIRED_QUEUE_LEN: int = 100
