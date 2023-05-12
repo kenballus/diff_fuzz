@@ -360,5 +360,5 @@ if __name__ == "__main__":
     run_id: str = str(uuid.uuid4())
     os.mkdir(RESULTS_DIR.joinpath(run_id))
     for ctr, final_result in enumerate(final_results):
-        with open(RESULTS_DIR.joinpath(run_id).joinpath("differential_{ctr}"), "wb") as result_file:
+        with open(RESULTS_DIR.joinpath(run_id).joinpath(f"differential_{ctr}"), "wb") as result_file:
             result_file.write(final_result)
