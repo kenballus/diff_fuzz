@@ -131,6 +131,7 @@ def make_command_line(tc: TargetConfig) -> List[str]:
             command_line.append("afl-showmap")
             if tc.needs_qemu:  # Enable QEMU mode, if necessary
                 command_line.append("-Q")
+        command_line.append("-q")  # Don't care about traced program stdout
         command_line.append("-e")  # Only care about edge coverage; ignore hit counts
         command_line += ["-o", "/dev/stdout"]
         command_line += ["-t", str(TIMEOUT_TIME)]
