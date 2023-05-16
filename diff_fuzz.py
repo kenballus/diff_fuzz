@@ -26,6 +26,7 @@ except ModuleNotFoundError:
 
 from config import (
     ParseTree,
+    compare_parse_trees,
     TargetConfig,
     TIMEOUT_TIME,
     TARGET_CONFIGS,
@@ -43,8 +44,7 @@ if USE_GRAMMAR_MUTATIONS:
         from grammar import generate_random_matching_input, grammar_re, grammar_dict  # type: ignore
     except ModuleNotFoundError:
         print(
-            "`grammar.py` not found. Either make one or set USE_GRAMMAR_MUTATIONS to False",
-            file=sys.stderr,
+            "`grammar.py` not found. Either make one or set USE_GRAMMAR_MUTATIONS to False", file=sys.stderr
         )
         sys.exit(1)
 
@@ -140,25 +140,13 @@ def make_command_line(tc: TargetConfig) -> List[str]:
     return command_line
 
 
-def field_cmp(t1: ParseTree | None, t2: ParseTree | None) -> Tuple[bool, ...]:
-    return (
-        (True,)
-        if t1 is t2 is None
-        else (
-            (False,)
-            if t1 is None or t2 is None
-            else tuple(getattr(t1, field.name) == getattr(t2, field.name) for field in fields(ParseTree))
-        )
-    )
-
-
 def minimize_differential(bug_inducing_input: bytes) -> bytes:
     _, orig_statuses, orig_parse_trees = run_executables(bug_inducing_input, disable_tracing=True)
 
     needs_parse_tree_comparison: bool = len(set(orig_statuses)) == 1
 
     orig_parse_tree_comparisons: List[Tuple[bool, ...]] = (
-        list(itertools.starmap(field_cmp, itertools.combinations(orig_parse_trees, 2)))
+        list(itertools.starmap(compare_parse_trees, itertools.combinations(orig_parse_trees, 2)))
         if needs_parse_tree_comparison
         else [(True,)]
     )
@@ -173,7 +161,7 @@ def minimize_differential(bug_inducing_input: bytes) -> bytes:
             if (
                 new_statuses == orig_statuses
                 and (
-                    list(itertools.starmap(field_cmp, itertools.combinations(new_parse_trees, 2)))
+                    list(itertools.starmap(compare_parse_trees, itertools.combinations(new_parse_trees, 2)))
                     if needs_parse_tree_comparison
                     else [(True,)]
                 )
@@ -349,10 +337,7 @@ if __name__ == "__main__":
         print("Differentials:", file=sys.stderr)
         print("\n".join(repr(b) for b in final_results))
     else:
-        print(
-            "No differentials found! Try increasing ROUGH_DESIRED_QUEUE_LEN.",
-            file=sys.stderr,
-        )
+        print("No differentials found! Try increasing ROUGH_DESIRED_QUEUE_LEN.", file=sys.stderr)
 
     run_id: str = str(uuid.uuid4())
     os.mkdir(RESULTS_DIR.joinpath(run_id))
