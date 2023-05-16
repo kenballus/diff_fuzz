@@ -77,9 +77,6 @@ class TargetConfig:
     needs_python_afl: bool = False
     # The environment variables to pass to the executable
     env: Dict[str, str] = field(default_factory=lambda: dict(environ))
-    # The character encoding that this program uses for its output
-    # (useful for normalization)
-    encoding: str = "UTF-8"
 
 
 # Configuration for each fuzzing target
