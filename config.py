@@ -54,7 +54,7 @@ class ParseTree:
 # This is the comparison operation on parse trees.
 # During minimization, the result of the function is preserved.
 # If your programs' output is expected to match completely, then leave this as-is.
-# Otherwise, rewrite it to implement an equivalence operation between your parse trees.
+# Otherwise, rewrite it to implement an equivalence relation between your parse trees.
 def compare_parse_trees(t1: ParseTree, t2: ParseTree) -> Tuple[bool, ...]:
     return (True,)
 
