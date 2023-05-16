@@ -5,9 +5,9 @@
 #############################################################################################
 
 from pathlib import PosixPath
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from dataclasses import dataclass, field
-import os
+from os import environ
 
 # The directory where the seed inputs are
 # The seeds are the files from which all the fuzzing inputs are produced,
@@ -51,6 +51,14 @@ class ParseTree:
     pass
 
 
+# This is the comparison operation on parse trees.
+# During minimization, the result of the function is preserved.
+# If your programs' output is expected to match completely, then leave this as-is.
+# Otherwise, rewrite it to implement an equivalence operation between your parse trees.
+def compare_parse_trees(t1: ParseTree, t2: ParseTree) -> Tuple[bool, ...]:
+    return (True,)
+
+
 @dataclass(frozen=True)
 class TargetConfig:
     # The path to this target's executable
@@ -68,7 +76,7 @@ class TargetConfig:
     # Whether this executable needs to run with python-afl (is a python script)
     needs_python_afl: bool = False
     # The environment variables to pass to the executable
-    env: Dict[str, str] = field(default_factory=lambda: dict(os.environ))
+    env: Dict[str, str] = field(default_factory=lambda: dict(environ))
     # The character encoding that this program uses for its output
     # (useful for normalization)
     encoding: str = "UTF-8"
