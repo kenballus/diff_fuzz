@@ -1,5 +1,7 @@
 __pycache__/*
+*.pyc
 targets/baby-c/baby-c
 targets/baby-cpp/baby-cpp
 traces/*
 inputs/*
+results/*

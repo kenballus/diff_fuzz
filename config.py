@@ -27,7 +27,7 @@ DETECT_OUTPUT_DIFFERENTIALS: bool = False
 
 # Set this to True if you want to use grammar mutations.
 # (Requires a grammar.py with the appropriate interface)
-USE_GRAMMAR_MUTATIONS: bool = True
+USE_GRAMMAR_MUTATIONS: bool = False
 
 # When this is True, a differential is registered if two targets exit with different status codes.
 # When it's False, a differential is registered only when one target exits with status 0 and another
@@ -82,12 +82,20 @@ class TargetConfig:
 # Configuration for each fuzzing target
 TARGET_CONFIGS: List[TargetConfig] = [
     TargetConfig(
-        executable=PosixPath("./targets/baby-cpp/baby-cpp"),
+        executable=PosixPath("./targets/pyasn1/pyasn1_target.py"),
+        needs_python_afl=True,
     ),
     TargetConfig(
-        executable=PosixPath("./targets/baby-c/baby-c"),
-        needs_qemu=True,
+        executable=PosixPath("./targets/asn1crypto/asn1crypto_target.py"),
+        needs_python_afl=True,
     ),
+    # TargetConfig(
+    #     executable=PosixPath("./targets/baby-cpp/baby-cpp"),
+    # ),
+    # TargetConfig(
+    #     executable=PosixPath("./targets/baby-c/baby-c"),
+    #     needs_qemu=True,
+    # ),
     # TargetConfig(
     #     executable=PosixPath("./targets/baby-py/baby.py"),
     #     needs_python_afl=True,
