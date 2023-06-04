@@ -29,7 +29,14 @@ Each configuration option is set and documented in `config.py`.
 A testing example is included. The default `config.py` is set up for this example.
 To run it:
 ```sh
-./build_and_run_examples.sh
+# Build the examples
+cd targets/baby-c
+make
+cd ../baby-cpp
+make
+cd ../..
+# Run
+make
 ```
 
 There are two programs targeted in `config.py`; `baby-c` and `baby-cpp`.
