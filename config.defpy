@@ -5,7 +5,6 @@
 #############################################################################################
 
 from pathlib import PosixPath
-from typing import List, Dict, Tuple
 from dataclasses import dataclass, field
 from os import environ
 
@@ -39,7 +38,7 @@ ROUGH_DESIRED_QUEUE_LEN: int = 100
 
 # The number of bytes deleted at a time in the minimization loop
 # The default choice was selected because of UTF-8.
-DELETION_LENGTHS: List[int] = [1]
+DELETION_LENGTHS: list[int] = [1]
 
 
 # This is the parse tree class for your programs' output.
@@ -56,7 +55,7 @@ class ParseTree:
 # During minimization, the result of the function is preserved.
 # If your programs' output is expected to match completely, then leave this as-is.
 # Otherwise, rewrite it to implement an equivalence relation between your parse trees.
-def compare_parse_trees(t1: ParseTree, t2: ParseTree) -> Tuple[bool, ...]:
+def compare_parse_trees(t1: ParseTree, t2: ParseTree) -> tuple[bool, ...]:
     # pylint: disable=unused-argument
     return (True,)
 
@@ -69,7 +68,7 @@ class TargetConfig:
     # The path to this target's executable
     executable: PosixPath
     # The CLI arguments this target needs
-    cli_args: List[str] = field(default_factory=list)
+    cli_args: list[str] = field(default_factory=list)
     # Whether this executable should be traced.
     # (turning off tracing is useful for untraceable
     #  targets, such as those written in unsupported
@@ -81,11 +80,11 @@ class TargetConfig:
     # Whether this executable needs to run with python-afl (is a python script)
     needs_python_afl: bool = False
     # The environment variables to pass to the executable
-    env: Dict[str, str] = field(default_factory=lambda: dict(environ))
+    env: dict[str, str] = field(default_factory=lambda: dict(environ))
 
 
 # Configuration for each fuzzing target
-TARGET_CONFIGS: List[TargetConfig] = [
+TARGET_CONFIGS: list[TargetConfig] = [
     TargetConfig(
         name="baby-cpp",
         executable=PosixPath("./targets/baby-cpp/baby-cpp"),
