@@ -248,7 +248,6 @@ def trace_batch(work_dir: PosixPath, batch: list[bytes]) -> list[fingerprint_t]:
     Runs the configured targets on the inputs in batch, and collects trace fingerprints.
     (A call to this function makes one process for each configured target)
     """
-    procs: list[subprocess.Popen] = []
 
     # Contains the data for this batch
     batch_dir: PosixPath = work_dir.joinpath(f"batch-{str(uuid.uuid4())}")
@@ -262,34 +261,42 @@ def trace_batch(work_dir: PosixPath, batch: list[bytes]) -> list[fingerprint_t]:
         with open(input_dir.joinpath(str(hash(b))), "wb") as f:
             f.write(b)
 
-    traced_targets: Iterable[TargetConfig] = filter(lambda tc: tc.needs_tracing, TARGET_CONFIGS)
+    procs: list[subprocess.Popen | None] = []
 
     # Run the batch through each configured target.
-    for tc in traced_targets:
-        # Contains the traces for this target on this batch
-        trace_dir: PosixPath = batch_dir.joinpath(f"traces-{tc.name}")
-        command_line: list[str] = make_command_line(tc, input_dir, trace_dir)
-        proc: subprocess.Popen = subprocess.Popen(
-            command_line,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            env=tc.env,
-            cwd=str(work_dir.resolve()),  # because afl makes temp files
-        )
-        procs.append(proc)
+    for tc in TARGET_CONFIGS:
+        if tc.needs_tracing:
+            # Contains the traces for this target on this batch
+            trace_dir: PosixPath = batch_dir.joinpath(f"traces-{tc.name}")
+            command_line: list[str] = make_command_line(tc, input_dir, trace_dir)
+            proc: subprocess.Popen = subprocess.Popen(
+                command_line,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=tc.env,
+                cwd=str(work_dir.resolve()),  # because afl makes temp files
+            )
+            procs.append(proc)
+        else:
+            procs.append(None)
 
     # Wait for the showmap processes to exit
-    for proc in procs:
-        proc.wait()
+    for p in procs:
+        if p is not None:
+            p.wait()
 
     # Extract the traces
     fingerprints: list[fingerprint_t] = []
     for b in batch:
         fingerprint: list[frozenset[int]] = []
-        for trace_dir in map(lambda tc: batch_dir.joinpath(f"traces-{tc.name}"), traced_targets):
-            with open(trace_dir.joinpath(str(hash(b))), "rb") as f:
-                fingerprint.append(parse_tracer_output(f.read()))
+        for tc in TARGET_CONFIGS:
+            if tc.needs_tracing:
+                trace_file: PosixPath = batch_dir.joinpath(f"traces-{tc.name}").joinpath(str(hash(b)))
+                with open(trace_file, "rb") as f:
+                    fingerprint.append(parse_tracer_output(f.read()))
+            else:
+                fingerprint.append(frozenset())
         fingerprints.append(tuple(fingerprint))
 
     shutil.rmtree(batch_dir)
@@ -300,7 +307,7 @@ def split_input_queue(l: list[bytes], num_chunks: int) -> list[list[bytes]]:
     chunk_size, remainder = divmod(len(l), num_chunks)
     return [
         l[i * chunk_size + min(i, remainder) : (i + 1) * chunk_size + min(i + 1, remainder)]
-        for i in range(num_chunks)
+        for i in range(min(num_chunks, len(l)))
     ]
 
 
@@ -348,7 +355,7 @@ def main(minimized_differentials: list[bytes], work_dir: PosixPath) -> None:
         with multiprocessing.Pool(processes=num_workers) as pool:
             fingerprints: list[fingerprint_t] = sum(
                 tqdm(
-                    pool.map(functools.partial(trace_batch, work_dir), batches),
+                    pool.imap(functools.partial(trace_batch, work_dir), batches),
                     desc="Tracing parsers...",
                     total=len(batches),
                 ),
@@ -357,9 +364,9 @@ def main(minimized_differentials: list[bytes], work_dir: PosixPath) -> None:
 
         # Re-run all the parsers, this time collecting stdouts and statuses
         with multiprocessing.Pool(processes=num_workers) as pool:
-            statuses_and_parse_trees = list(
+            statuses_and_parse_trees: list[tuple[tuple[int, ...], tuple[ParseTree | None, ...]]] = list(
                 tqdm(
-                    pool.map(run_targets, input_queue),
+                    pool.imap(run_targets, input_queue),
                     desc="Running parsers...",
                     total=len(input_queue),
                 )
@@ -390,7 +397,7 @@ def main(minimized_differentials: list[bytes], work_dir: PosixPath) -> None:
         with multiprocessing.Pool(processes=num_workers) as pool:
             minimized_inputs: Iterable[bytes] = list(
                 tqdm(
-                    pool.map(minimize_differential, differentials),
+                    pool.imap(minimize_differential, differentials),
                     desc="Minimizing differentials...",
                     total=len(differentials),
                 )

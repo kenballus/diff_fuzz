@@ -56,8 +56,7 @@ class ParseTree:
 # If your programs' output is expected to match completely, then leave this as-is.
 # Otherwise, rewrite it to implement an equivalence relation between your parse trees.
 def compare_parse_trees(t1: ParseTree, t2: ParseTree) -> tuple[bool, ...]:
-    # pylint: disable=unused-argument
-    return (True,)
+    return (t1 == t2,)
 
 
 # This is the configuration class for each target program.

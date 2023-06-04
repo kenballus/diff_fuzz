@@ -12,4 +12,4 @@ typecheck:
 	mypy diff_fuzz.py
 
 lint:
-	pylint --disable=line-too-long,missing-module-docstring,invalid-name,missing-function-docstring,missing-class-docstring,unnecessary-lambda-assignment,consider-using-with,too-many-locals,multiple-statements,protected-access,too-many-branches *.py
+	pylint --disable=line-too-long,missing-module-docstring,invalid-name,missing-function-docstring,missing-class-docstring,consider-using-with,too-many-locals,too-many-branches *.py
