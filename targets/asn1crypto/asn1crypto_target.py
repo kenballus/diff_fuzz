@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from sys import stdin
 from os import _exit
 import afl

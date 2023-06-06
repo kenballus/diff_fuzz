@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from sys import stdin
 from os import _exit
 from pyasn1.codec.der.decoder import decode
@@ -15,11 +16,10 @@ def build_tree(base) -> str:
         value = bytes(base)
     elif tag == 5:
         value = None
-    elif tag == 23 or tag == 24:
-        try:
-            value = datetime.strptime(str(base), r'%y%m%d%H%M%S%z')
-        except ValueError as e:
-            value = datetime.strptime(str(base), r'%Y%m%d%H%M%S%z')
+    elif tag == 23:
+        value = datetime.strptime(str(base), r'%y%m%d%H%M%S%z')
+    elif tag == 24:
+        value = datetime.strptime(str(base), r'%Y%m%d%H%M%S%z')
     else:
         value = base
 

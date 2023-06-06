@@ -133,8 +133,6 @@ def make_command_line(tc: TargetConfig) -> List[str]:
         command_line += ["-t", str(TIMEOUT_TIME)]
         command_line.append("--")
 
-    if tc.needs_python_afl:
-        command_line.append("python3")
     command_line.append(str(tc.executable.resolve()))
     command_line += tc.cli_args
 

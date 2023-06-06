@@ -9,6 +9,7 @@ from typing import List, Dict, Tuple
 from dataclasses import dataclass, field
 from frozendict import frozendict
 from frozenlist import FrozenList
+import functools
 from os import environ
 
 # The directory where the seed inputs are
@@ -73,10 +74,25 @@ def freeze(to_freeze: any) -> any:
 # If your programs' output is expected to match completely, then leave this as-is.
 # Otherwise, rewrite it to implement an equivalence relation between your parse trees.
 def compare_parse_trees(t1: ParseTree, t2: ParseTree) -> Tuple[bool, ...]:
-    return (t1.tree == t2.tree,)
+    return (t1.tree==t2.tree,)
 
-# TODO; Seperate Sets and Sequences
-
+def build_comparison(d1: dict[str, any], d2: dict[str, any]) -> Tuple[bool, ...]:
+    if d1['tag'] != d2['tag']:
+        return (False,)
+    if d1['tag'] == 16 or d1['tag'] == 17: # Sequence
+        list_comparison: tuple[bool, ...] = tuple()
+        for item1, item2 in zip(d1['value'], d2['value']):
+            list_comparison += build_comparison(item1, item2)
+            if not list_comparison[len(list_comparison) - 1]:
+                return list_comparison
+        if len(d1['value']) != len(d2['value']):
+            list_comparison += (False,)
+        return list_comparison
+    # elif d1['tag'] == 17: # Set TODO
+    #     pass
+    else:
+        return (d1['value']==d2['value'],)
+        
 
 @dataclass(frozen=True)
 class TargetConfig:
