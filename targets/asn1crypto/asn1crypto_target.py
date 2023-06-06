@@ -22,7 +22,7 @@ def main() -> None:
     afl.init()
     asn = stdin.buffer.read()
     x = load(asn, strict=True)
-    print(build_tree(x))
+    print(f"{{\"tree\" : {build_tree(x)}}}", flush=True)
 
     _exit(0)
 

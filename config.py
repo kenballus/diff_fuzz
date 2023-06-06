@@ -7,6 +7,8 @@
 from pathlib import PosixPath
 from typing import List, Dict, Tuple
 from dataclasses import dataclass, field
+from frozendict import frozendict
+from frozenlist import FrozenList
 from os import environ
 
 # The directory where the seed inputs are
@@ -23,7 +25,7 @@ TIMEOUT_TIME: int = 10000
 
 # Set this to false if you only care about exit status differentials
 # (i.e. the programs you're testing aren't expected to have identical output on stdout)
-DETECT_OUTPUT_DIFFERENTIALS: bool = False
+DETECT_OUTPUT_DIFFERENTIALS: bool = True
 
 # Set this to True if you want to use grammar mutations.
 # (Requires a grammar.py with the appropriate interface)
@@ -48,15 +50,32 @@ DELETION_LENGTHS: List[int] = [4, 3, 2, 1]
 # output JSON.
 @dataclass(frozen=True)
 class ParseTree:
-    pass
+    tree: frozendict[str, any]
 
+def create_parse_tree(*args, **kwargs) -> ParseTree:
+    return ParseTree(freeze(kwargs['tree']))
+
+def freeze(to_freeze: any) -> any:
+    if type(to_freeze) == list:
+        fl = FrozenList()
+        for v in to_freeze:
+            fl.append(freeze(v))
+        fl.freeze()
+        return fl
+    elif type(to_freeze) == dict:
+        for k in to_freeze:
+            to_freeze[k] = freeze(to_freeze[k])
+        return frozendict(to_freeze)
+    return to_freeze
 
 # This is the comparison operation on parse trees.
 # During minimization, the result of the function is preserved.
 # If your programs' output is expected to match completely, then leave this as-is.
 # Otherwise, rewrite it to implement an equivalence relation between your parse trees.
 def compare_parse_trees(t1: ParseTree, t2: ParseTree) -> Tuple[bool, ...]:
-    return (True,)
+    return (t1.tree == t2.tree,)
+
+# TODO; Seperate Sets and Sequences
 
 
 @dataclass(frozen=True)

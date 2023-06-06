@@ -26,6 +26,7 @@ except ModuleNotFoundError:
 
 from config import (
     ParseTree,
+    create_parse_tree,
     compare_parse_trees,
     TargetConfig,
     TIMEOUT_TIME,
@@ -230,7 +231,7 @@ def run_executables(
 
     # Extract their parse trees
     parse_trees: List[ParseTree | None] = [
-        ParseTree(**json.loads(proc.stdout.read())) if proc.stdout is not None and status == 0 else None
+        create_parse_tree(**json.loads(proc.stdout.read())) if proc.stdout is not None and status == 0 else None
         for proc, status in zip(untraced_procs, statuses)
     ]
 
