@@ -19,7 +19,7 @@ import uuid
 import shutil
 import base64
 from pathlib import PosixPath
-from typing import Callable, Iterable
+from typing import Callable
 
 
 from tqdm import tqdm  # type: ignore
@@ -202,7 +202,7 @@ def minimize_differential(bug_inducing_input: bytes) -> bytes:
 def run_targets(the_input: bytes) -> tuple[tuple[int, ...], tuple[ParseTree | None, ...]]:
     """
     This function needs a better name.
-    This runs the parsers on an input, and returns a (exit_statuses, parse_trees) pair.
+    This runs the targets on an input, and returns a (exit_statuses, parse_trees) pair.
     (A call to this function makes one process for each configured target)
     """
     procs: list[subprocess.Popen] = []
@@ -352,29 +352,27 @@ def main(minimized_differentials: list[bytes], work_dir: PosixPath) -> None:
         batches: list[list[bytes]] = split_input_queue(input_queue, num_workers)
 
         # Trace all the parser runs
+        print("Tracing targets...", end="", file=sys.stderr)
         with multiprocessing.Pool(processes=num_workers) as pool:
-            fingerprints: list[fingerprint_t] = sum(
-                tqdm(
-                    pool.imap(functools.partial(trace_batch, work_dir), batches),
-                    desc="Tracing parsers...",
-                    total=len(batches),
-                ),
+            new_fingerprints: list[fingerprint_t] = sum(
+                pool.imap(functools.partial(trace_batch, work_dir), batches),
                 start=[],
             )
+        print("Done!", file=sys.stderr)
 
-        # Re-run all the parsers, this time collecting stdouts and statuses
+        # Re-run all the targets, this time collecting stdouts and statuses
         with multiprocessing.Pool(processes=num_workers) as pool:
             statuses_and_parse_trees: list[tuple[tuple[int, ...], tuple[ParseTree | None, ...]]] = list(
                 tqdm(
                     pool.imap(run_targets, input_queue),
-                    desc="Running parsers...",
+                    desc="Running targets...",
                     total=len(input_queue),
                 )
             )
 
         # Check for differentials and new coverage
         for current_input, fingerprint, (statuses, parse_trees) in zip(
-            input_queue, fingerprints, statuses_and_parse_trees
+            input_queue, new_fingerprints, statuses_and_parse_trees
         ):
             if fingerprint not in seen_fingerprints:
                 seen_fingerprints.add(fingerprint)
@@ -395,18 +393,27 @@ def main(minimized_differentials: list[bytes], work_dir: PosixPath) -> None:
 
         # Minimize differentials
         with multiprocessing.Pool(processes=num_workers) as pool:
-            minimized_inputs: Iterable[bytes] = list(
+            minimized_inputs: list[bytes] = list(
                 tqdm(
                     pool.imap(minimize_differential, differentials),
                     desc="Minimizing differentials...",
                     total=len(differentials),
                 )
             )
-        for minimized_input in minimized_inputs:
-            minimized_fingerprint: fingerprint_t = trace_batch(work_dir, [minimized_input])[0]
-            if minimized_fingerprint not in minimized_fingerprints:
-                minimized_differentials.append(minimized_input)
-                minimized_fingerprints.add(minimized_fingerprint)
+            print("Tracing minimized differentials...", file=sys.stderr)
+            new_minimized_fingerprints: list[fingerprint_t] = sum(
+                pool.imap(
+                    functools.partial(trace_batch, work_dir), split_input_queue(minimized_inputs, num_workers)
+                ),
+                [],
+            )
+            print("Done!", file=sys.stderr)
+            for new_minimized_fingerprint, minimized_input in zip(
+                new_minimized_fingerprints, minimized_inputs
+            ):
+                if new_minimized_fingerprint not in minimized_fingerprints:
+                    minimized_differentials.append(minimized_input)
+                    minimized_fingerprints.add(new_minimized_fingerprint)
 
         input_queue.clear()
         while len(mutation_candidates) != 0 and len(input_queue) < ROUGH_DESIRED_QUEUE_LEN:
