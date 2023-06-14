@@ -22,7 +22,7 @@ def build_tree(base) -> str:
         value = datetime.strptime(str(base), r'%Y%m%d%H%M%S%z')
     else:
         value = base
-    # return f"{tag_json}{value}"
+    #return f"{tag_json}\"{value}\"}}"
     return tag_json + f"\"{b64encode(str(value).encode('utf-8')).decode('ascii')}\"}}"
 
 def main() -> None:

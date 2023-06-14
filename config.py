@@ -8,7 +8,6 @@ from pathlib import PosixPath
 from typing import List, Dict, Tuple
 from dataclasses import dataclass, field
 from frozendict import frozendict
-from frozenlist import FrozenList
 import functools
 from os import environ
 
@@ -57,13 +56,9 @@ def create_parse_tree(*args, **kwargs) -> ParseTree:
     return ParseTree(freeze(kwargs['tree']))
 
 def freeze(to_freeze: any) -> any:
-    if type(to_freeze) == list:
-        fl = FrozenList()
-        for v in to_freeze:
-            fl.append(freeze(v))
-        fl.freeze()
-        return fl
-    elif type(to_freeze) == dict:
+    if isinstance(to_freeze, list):
+        return tuple(to_freeze)
+    elif isinstance(to_freeze, dict):
         for k in to_freeze:
             to_freeze[k] = freeze(to_freeze[k])
         return frozendict(to_freeze)
@@ -124,6 +119,9 @@ TARGET_CONFIGS: List[TargetConfig] = [
         executable=PosixPath("./targets/asn1crypto/asn1crypto_target.py"),
         needs_python_afl=True,
     ),
+    TargetConfig(
+        executable=PosixPath("./targets/openssl/openssl_target"),
+    )
     # TargetConfig(
     #     executable=PosixPath("./targets/baby-cpp/baby-cpp"),
     # ),

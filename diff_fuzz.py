@@ -303,7 +303,7 @@ def main(minimized_differentials: List[bytes]) -> None:
                 total=len(differentials),
             )
             for minimized_input in minimized_inputs:
-                minimized_fingerprint, _, _ = run_executables(minimized_input)
+                minimized_fingerprint, _, _ = (minimized_input)
                 if minimized_fingerprint not in minimized_fingerprints:
                     minimized_differentials.append(minimized_input)
                     minimized_fingerprints.add(minimized_fingerprint)
