@@ -40,14 +40,38 @@ The fuzzer will probably discover such an input in generation 1.
 Also included is `baby-py`, which is a target demonstrating Python instrumentation.
 Its behavior differs from the other two targets in a few ways, most notably that it requires that it reads 1 UTF-8 character, not 1 byte.
 
-# Interpreting Results
-At the end of a run of the fuzzer, you should see several outputs that look something like this:
+# Interpreting Output
+
+## Results
+
+At the end of a run of the fuzzer, you should see several outputs on stderr that look something like this:
 ```
 Differential: \xbe                 Path: results/9c2b1094-dd60-4ba0-b761-cea85e109898/7839048121533453113
 ```
 This indicates that the generated input, displayed as `\xbe` in character-escaped ASCII causes two of targets to either have different stdouts or different exit statuses.
 In an actual fuzzing run, you would then inspect it to determine the cause of the differential behavior.
 The input is also saved in its byte form in the file `results/9c2b1094-dd60-4ba0-b761-cea85e109898/7839048121533453113`
+
+## UUID (Universal Unique Identifier)
+
+At the end of a run of the fuzzer you will see one output on stdout that looks something like this:
+```
+94ee5bed-0459-422b-a025-e6ce36efc8cd
+```
+This is the run's UUID. There will be a directory of this name the results directory and a file of this name in the reports directory. The UUID directory in the results directory has a file for each differential found which contain inputs in bytes that result in that differential. The UUID file in the reports directory is a JSON file which has information about the run.
+
+## Generation Statistics
+
+At the end of each generation in the fuzzer you will see output on stderr that looks something like this:
+```
+End of generation 3.
+Differentials:          2
+Mutation candidates:    0
+Coverage:                       (3, 23, 28)
+```
+- `Differentials` is the total number of differentials found by this run of the fuzzer by the end of this generation.
+- `Mutation Candidates` is the number of generated inputs in this generation that were interesting enough such that they can be used as the basis for further mutation.
+- `Coverage` is the number of unique edges hit by this run of fuzzer for each target by the end of this generation.
 
 # Grammar-Based Fuzzing
 To use grammar-based mutation, you need to supply a file `grammar.py` with the following symbol defined:
