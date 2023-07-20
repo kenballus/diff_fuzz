@@ -31,7 +31,7 @@ T = TypeVar("T")
 def attempt(f: Callable[..., T], error_message: str, *args, **kwargs) -> T | None:
     try:
         return f(*args, **kwargs)
-    except:  # pylint: disable=broad-except
+    except:  # pylint: disable=bare-except
         print(error_message, file=sys.stderr)
         return None
 

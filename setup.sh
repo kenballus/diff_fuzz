@@ -16,9 +16,9 @@ echo "done"
 
 echo -n "Setting up venv..."
 python3 -c 'import sys; exit(sys.prefix != sys.base_prefix)' || fail "Looks like you're already in a venv. This script needs to make its own venv. Please deactivate your venv and source this script again."
-rm -rf url_fuzz_env || fail "Couldn't remove old venv."
-python3 -m venv url_fuzz_env || fail "Couldn't make a venv."
-source ./url_fuzz_env/bin/activate || fail "Couldn't activate the venv."
+rm -rf fuzz_env || fail "Couldn't remove old venv."
+python3 -m venv fuzz_env || fail "Couldn't make a venv."
+source ./fuzz_env/bin/activate || fail "Couldn't activate the venv."
 pip3 install --upgrade pip &>/dev/null || fail "Couldn't update pip."
 echo "done"
 
@@ -41,4 +41,4 @@ echo "done"
 mkdir -p seeds results reports benchmarking/{bench_configs,queues,analyses}
 
 deactivate
-echo -e "\033[32mYou are now in the fuzzing venv. run \`source url_fuzz_env/activate\` to exit the venv.\033[0m"
+echo -e "\033[32mThe fuzzing venv has now been created. run \`source fuzz_env/bin/activate\` to enter the venv.\033[0m"
