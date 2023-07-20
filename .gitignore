@@ -1,7 +1,13 @@
-__pycache__/*
+inputs
+traces
+**/__pycache__
+url_fuzz_env/*
+.hypothesis/*
+.mypy_cache/*
+python_pkgs/*
 targets/baby-c/baby-c
 targets/baby-cpp/baby-cpp
-traces/*
-inputs/*
-results/*
+results
 config.py
+benchmarking
+reports

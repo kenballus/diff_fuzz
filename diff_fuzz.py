@@ -55,6 +55,7 @@ assert SEED_DIR.is_dir()
 SEED_INPUTS: list[PosixPath] = list(map(lambda s: SEED_DIR.joinpath(PosixPath(s)), os.listdir(SEED_DIR)))
 
 assert RESULTS_DIR.is_dir()
+assert REPORTS_DIR.is_dir()
 
 assert all(map(lambda tc: tc.executable.exists(), TARGET_CONFIGS))
 
