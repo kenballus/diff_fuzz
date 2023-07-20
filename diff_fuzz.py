@@ -8,16 +8,17 @@
 
 import sys
 import subprocess
+import dataclasses
 import multiprocessing
 import random
 import itertools
 import os
-import re
 import json
 import functools
 import uuid
 import shutil
 import base64
+import time
 from pathlib import PosixPath
 from typing import Callable
 
@@ -25,8 +26,9 @@ from typing import Callable
 from tqdm import tqdm  # type: ignore
 
 from config import (
-    ParseTree,
     compare_parse_trees,
+    get_replacement_byte,
+    ParseTree,
     TargetConfig,
     TIMEOUT_TIME,
     TARGET_CONFIGS,
@@ -36,12 +38,13 @@ from config import (
     DIFFERENTIATE_NONZERO_EXIT_STATUSES,
     DELETION_LENGTHS,
     RESULTS_DIR,
+    REPORTS_DIR,
     USE_GRAMMAR_MUTATIONS,
 )
 
 if USE_GRAMMAR_MUTATIONS:
     try:
-        from grammar import generate_random_matching_input, grammar_re, grammar_dict  # type: ignore
+        from grammar import GRAMMAR_MUTATORS
     except ModuleNotFoundError:
         print(
             "`grammar.py` not found. Either make one or set USE_GRAMMAR_MUTATIONS to False", file=sys.stderr
@@ -52,41 +55,18 @@ assert SEED_DIR.is_dir()
 SEED_INPUTS: list[PosixPath] = list(map(lambda s: SEED_DIR.joinpath(PosixPath(s)), os.listdir(SEED_DIR)))
 
 assert RESULTS_DIR.is_dir()
+assert REPORTS_DIR.is_dir()
 
 assert all(map(lambda tc: tc.executable.exists(), TARGET_CONFIGS))
 
 fingerprint_t = tuple[frozenset[int], ...]
 
-
-def grammar_regenerate(b: bytes) -> bytes:
-    # Assumes that b matches the grammar_re.
-    # Returns a mutated b with a portion regenerated.
-    m: re.Match[bytes] | None = re.match(grammar_re, b)
-    assert m is not None
-    rule_name: str = random.choice(
-        [rule_name for rule_name, rule_match in m.groupdict().items() if rule_match is not None]
-    )
-    new_rule_match: bytes = generate_random_matching_input(grammar_dict[rule_name])
-    start, end = m.span(rule_name)
-    return m.string[:start] + new_rule_match + m.string[end:]
+json_t = None | bool | str | int | float | dict[str, "json_t"] | list["json_t"]
 
 
-def grammar_duplicate(b: bytes) -> bytes:
-    # Assumes that b matches the grammar_re.
-    # Returns a mutated b with a portion duplicated some number of times.
-    m: re.Match[bytes] | None = re.match(grammar_re, b)
-    assert m is not None
-    rule_name: str = random.choice(
-        [rule_name for rule_name, rule_match in m.groupdict().items() if rule_match is not None]
-    )
-    start, end = m.span(rule_name)
-    new_rule_match: bytes = m[rule_name]
-    for _ in range(random.randint(1, 5)):
-        new_rule_match *= 2
-    return m.string[:start] + new_rule_match + m.string[end:]
-
-
-def byte_change(b: bytes) -> bytes:
+def byte_replace(b: bytes) -> bytes:
+    if len(b) == 0:
+        raise ValueError("Mutation precondition didn't hold.")
     index: int = random.randint(0, len(b) - 1)
     return b[:index] + bytes([random.randint(0, 255)]) + b[index + 1 :]
 
@@ -97,22 +77,27 @@ def byte_insert(b: bytes) -> bytes:
 
 
 def byte_delete(b: bytes) -> bytes:
+    if len(b) <= 1:
+        raise ValueError("Mutation precondition didn't hold.")
     index: int = random.randint(0, len(b) - 1)
     return b[:index] + b[index + 1 :]
 
 
-def mutate(b: bytes) -> bytes:
-    mutators: list[Callable[[bytes], bytes]] = [byte_insert]
-    if len(b) > 0:
-        mutators.append(byte_change)
-    if len(b) > 1:
-        mutators.append(byte_delete)
-    if USE_GRAMMAR_MUTATIONS:
-        if re.match(grammar_re, b) is not None:
-            mutators.append(grammar_regenerate)
-            mutators.append(grammar_duplicate)
+MUTATORS: list[Callable[[bytes], bytes]] = [byte_replace, byte_insert, byte_delete] + (
+    GRAMMAR_MUTATORS if USE_GRAMMAR_MUTATIONS else []
+)
 
-    return random.choice(mutators)(b)
+
+def mutate(b: bytes) -> bytes:
+    mutators: list[Callable[[bytes], bytes]] = MUTATORS.copy()
+    while len(mutators) != 0:
+        try:
+            mutator: Callable[[bytes], bytes] = random.choice(mutators)
+            return mutator(b)
+        except ValueError:
+            mutators.remove(mutator)
+    print("Input {b!r} cannot be mutated.", file=sys.stderr)
+    sys.exit(1)
 
 
 def parse_tracer_output(tracer_output: bytes) -> frozenset[int]:
@@ -194,6 +179,24 @@ def minimize_differential(bug_inducing_input: bytes) -> bytes:
                 i -= deletion_length
             else:
                 i -= 1
+
+    # This will break if a replacement changes the length of result.
+    for i, c in enumerate(result):
+        replacement_byte: bytes = get_replacement_byte(c)
+        if replacement_byte == b"":  # No replacement can be made
+            continue
+        substituted_form: bytes = result[:i] + replacement_byte + result[i + 1 :]
+        new_statuses, new_parse_trees = run_targets(substituted_form)
+        if (
+            new_statuses == orig_statuses
+            and (
+                list(itertools.starmap(compare_parse_trees, itertools.combinations(new_parse_trees, 2)))
+                if needs_parse_tree_comparison
+                else [(True,)]
+            )
+            == orig_parse_tree_comparisons
+        ):
+            result = substituted_form
 
     return result
 
@@ -311,10 +314,29 @@ def split_input_queue(l: list[bytes], num_chunks: int) -> list[list[bytes]]:
     ]
 
 
-def main(minimized_differentials: list[bytes], work_dir: PosixPath) -> None:
-    # We take minimized_differentials as an argument because we want
-    # it to persist even if this function has an uncaught exception.
-    assert len(minimized_differentials) == 0
+# Data class for holding information about how many cumulative unique edges of each parser were found in each generation and at what time.
+# Stored in JSON in the coverage list which has a list for each parser, these lists consist of JSON objects for each generation which record generation, time, and
+# number of unique edges uncovered in that parser up to that generation.
+@dataclasses.dataclass
+class EdgeCountSnapshot:
+    edge_count: int
+    time: float
+    generation: int
+
+
+@dataclasses.dataclass
+class Differential:
+    differential: bytes
+    time_found: float
+    generation_found: int
+
+
+def fuzz(
+    work_dir: PosixPath,
+) -> tuple[list[Differential], dict[str, list[EdgeCountSnapshot]]]:
+    start_time: float = time.time()
+    differentials_with_info: list[Differential] = []
+    coverage_info: dict[str, list[EdgeCountSnapshot]] = {tc.name: [] for tc in TARGET_CONFIGS}
     num_cpus = os.cpu_count()
     assert num_cpus is not None
 
@@ -336,6 +358,8 @@ def main(minimized_differentials: list[bytes], work_dir: PosixPath) -> None:
     # An input is worth mutation if its fingerprint is new.
     seen_fingerprints: set[fingerprint_t] = set()
 
+    seen_edges: dict[str, set[int]] = {tc.name: set() for tc in TARGET_CONFIGS}
+
     # This is the set of fingerprints that correspond with minimized differentials.
     # Whenever we minimize a differential into an input with a fingerprint not in this set,
     # we report it and add it to this set.
@@ -343,115 +367,166 @@ def main(minimized_differentials: list[bytes], work_dir: PosixPath) -> None:
 
     generation: int = 0
 
-    while len(input_queue) != 0:  # While there are still inputs to check,
-        print(f"Starting generation {generation}.", file=sys.stderr)
-        mutation_candidates: list[bytes] = []
-        differentials: list[bytes] = []
-
-        # Split the input queue into batches, with one batch for each worker.
-        batches: list[list[bytes]] = split_input_queue(input_queue, num_workers)
-
-        # Trace all the parser runs
-        print("Tracing targets...", end="", file=sys.stderr)
-        with multiprocessing.Pool(processes=num_workers) as pool:
-            new_fingerprints: list[fingerprint_t] = sum(
-                pool.imap(functools.partial(trace_batch, work_dir), batches),
-                start=[],
-            )
-        print("Done!", file=sys.stderr)
-
-        # Re-run all the targets, this time collecting stdouts and statuses
-        with multiprocessing.Pool(processes=num_workers) as pool:
-            statuses_and_parse_trees: list[tuple[tuple[int, ...], tuple[ParseTree | None, ...]]] = list(
-                tqdm(
-                    pool.imap(run_targets, input_queue),
-                    desc="Running targets...",
-                    total=len(input_queue),
-                )
-            )
-
-        # Check for differentials and new coverage
-        for current_input, fingerprint, (statuses, parse_trees) in zip(
-            input_queue, new_fingerprints, statuses_and_parse_trees
-        ):
-            if fingerprint not in seen_fingerprints:
-                seen_fingerprints.add(fingerprint)
-                status_set: set[int] = set(statuses)
-                if (len(status_set) != 1) or (
-                    DETECT_OUTPUT_DIFFERENTIALS
-                    and status_set == {0}
-                    and any(
-                        False in cmp_vector
-                        for cmp_vector in itertools.starmap(
-                            compare_parse_trees, itertools.combinations(parse_trees, 2)
-                        )
-                    )
-                ):
-                    differentials.append(current_input)
-                else:
-                    mutation_candidates.append(current_input)
-
-        # Minimize differentials
-        with multiprocessing.Pool(processes=num_workers) as pool:
-            minimized_inputs: list[bytes] = list(
-                tqdm(
-                    pool.imap(minimize_differential, differentials),
-                    desc="Minimizing differentials...",
-                    total=len(differentials),
-                )
-            )
-            print("Tracing minimized differentials...", file=sys.stderr)
-            new_minimized_fingerprints: list[fingerprint_t] = sum(
-                pool.imap(
-                    functools.partial(trace_batch, work_dir), split_input_queue(minimized_inputs, num_workers)
-                ),
-                [],
-            )
-            print("Done!", file=sys.stderr)
-            for new_minimized_fingerprint, minimized_input in zip(
-                new_minimized_fingerprints, minimized_inputs
-            ):
-                if new_minimized_fingerprint not in minimized_fingerprints:
-                    minimized_differentials.append(minimized_input)
-                    minimized_fingerprints.add(new_minimized_fingerprint)
-
-        input_queue.clear()
-        while len(mutation_candidates) != 0 and len(input_queue) < ROUGH_DESIRED_QUEUE_LEN:
-            input_queue += list(map(mutate, mutation_candidates))
-
-        print(
-            f"End of generation {generation}.\n"
-            + f"Differentials:\t\t{len(minimized_differentials)}\n"
-            + f"Mutation candidates:\t{len(mutation_candidates)}",
-            file=sys.stderr,
-        )
-        generation += 1
-
-
-if __name__ == "__main__":
-    if len(sys.argv) > 2:
-        print(f"Usage: python3 {sys.argv[0]}", file=sys.stderr)
-        sys.exit(1)
-
-    _run_id: str = str(uuid.uuid4())
-    _work_dir: PosixPath = PosixPath("/tmp").joinpath(f"diff_fuzz-{_run_id}")
-    os.mkdir(_work_dir)
-
-    _final_results: list[bytes] = []
     try:
-        main(_final_results, _work_dir)
+        while len(input_queue) != 0:  # While there are still inputs to check,
+            print(f"Starting generation {generation}.", file=sys.stderr)
+            mutation_candidates: list[bytes] = []
+            differentials: list[bytes] = []
+
+            # Split the input queue into batches, with one batch for each worker.
+            batches: list[list[bytes]] = split_input_queue(input_queue, num_workers)
+
+            # Trace all the parser runs
+            print("Tracing targets...", end="", file=sys.stderr)
+            with multiprocessing.Pool(processes=num_workers) as pool:
+                new_fingerprints: list[fingerprint_t] = sum(
+                    pool.imap(functools.partial(trace_batch, work_dir), batches),
+                    start=[],
+                )
+            print("done!", file=sys.stderr)
+
+            # Re-run all the targets, this time collecting stdouts and statuses
+            with multiprocessing.Pool(processes=num_workers) as pool:
+                statuses_and_parse_trees: list[tuple[tuple[int, ...], tuple[ParseTree | None, ...]]] = list(
+                    tqdm(
+                        pool.imap(run_targets, input_queue),
+                        desc="Running targets...",
+                        total=len(input_queue),
+                    )
+                )
+
+            # Check for differentials and new coverage
+            for current_input, fingerprint, (statuses, parse_trees) in zip(
+                input_queue, new_fingerprints, statuses_and_parse_trees
+            ):
+                if fingerprint not in seen_fingerprints:
+                    seen_fingerprints.add(fingerprint)
+                    status_set: set[int] = set(statuses)
+                    if (len(status_set) != 1) or (
+                        DETECT_OUTPUT_DIFFERENTIALS
+                        and status_set == {0}
+                        and any(
+                            False in cmp_vector
+                            for cmp_vector in itertools.starmap(
+                                compare_parse_trees, itertools.combinations(parse_trees, 2)
+                            )
+                        )
+                    ):
+                        differentials.append(current_input)
+                    else:
+                        mutation_candidates.append(current_input)
+                    # Record new edges
+                    for tc, new_edges in zip(TARGET_CONFIGS, fingerprint):
+                        seen_edges[tc.name].update(new_edges)
+
+            for tc in TARGET_CONFIGS:
+                coverage_info[tc.name].append(
+                    EdgeCountSnapshot(len(seen_edges[tc.name]), time.time() - start_time, generation)
+                )
+
+            # Minimize differentials
+            with multiprocessing.Pool(processes=num_workers) as pool:
+                minimized_inputs: list[bytes] = list(
+                    tqdm(
+                        pool.imap(minimize_differential, differentials),
+                        desc="Minimizing differentials...",
+                        total=len(differentials),
+                    )
+                )
+                print("Tracing minimized differentials...", file=sys.stderr)
+                new_minimized_fingerprints: list[fingerprint_t] = sum(
+                    pool.imap(
+                        functools.partial(trace_batch, work_dir),
+                        split_input_queue(minimized_inputs, num_workers),
+                    ),
+                    [],
+                )
+                print("done!", file=sys.stderr)
+                for new_minimized_fingerprint, minimized_input in zip(
+                    new_minimized_fingerprints, minimized_inputs
+                ):
+                    if new_minimized_fingerprint not in minimized_fingerprints:
+                        differentials_with_info.append(
+                            Differential(minimized_input, time.time() - start_time, generation)
+                        )
+                        minimized_fingerprints.add(new_minimized_fingerprint)
+
+            input_queue.clear()
+            while len(mutation_candidates) != 0 and len(input_queue) < ROUGH_DESIRED_QUEUE_LEN:
+                input_queue += list(map(mutate, mutation_candidates))
+
+            print(
+                f"End of generation {generation}.\n"
+                + f"Differentials:\t\t{len(differentials_with_info)}\n"
+                + f"Mutation candidates:\t{len(mutation_candidates)}\n"
+                + f"Coverage:\t\t\t{tuple(len(x) for x in seen_edges.values())}",
+                file=sys.stderr,
+            )
+            generation += 1
     except KeyboardInterrupt:
         pass
 
-    if len(_final_results) != 0:
-        print("Differentials:", file=sys.stderr)
-        print("\n".join(repr(b) for b in _final_results))
-    else:
-        print("No differentials found! Try increasing ROUGH_DESIRED_QUEUE_LEN.", file=sys.stderr)
+    return differentials_with_info, coverage_info
 
-    os.mkdir(RESULTS_DIR.joinpath(_run_id))
-    for ctr, final_result in enumerate(_final_results):
-        with open(RESULTS_DIR.joinpath(_run_id).joinpath(f"differential_{ctr}"), "wb") as result_file:
-            result_file.write(final_result)
 
-    shutil.rmtree(_work_dir)
+def main() -> None:
+    if len(sys.argv) > 2:
+        print(f"Usage: python3 {sys.argv[0]} run_folder", file=sys.stderr)
+        sys.exit(1)
+
+    run_id: str = sys.argv[1] if len(sys.argv) >= 2 else str(uuid.uuid4())
+    if os.path.exists(RESULTS_DIR.joinpath(run_id)):
+        print("Results folder already exists. Overriding.", file=sys.stderr)
+        shutil.rmtree(RESULTS_DIR.joinpath(run_id))
+    work_dir: PosixPath = PosixPath("/tmp").joinpath(f"diff_fuzz-{run_id}")
+    os.mkdir(work_dir)
+
+    differentials_with_info, coverage_info = fuzz(work_dir)
+
+    run_results_dir = RESULTS_DIR.joinpath(run_id)
+    os.mkdir(run_results_dir)
+    for final_diff_with_info in differentials_with_info:
+        final_differential: bytes = final_diff_with_info.differential
+        result_file_path = run_results_dir.joinpath(str(hash(final_differential)))
+        with open(result_file_path, "wb") as result_file:
+            result_file.write(final_differential)
+            print(
+                f"Differential: {str(final_differential)[2:-1]:20} Path: {str(result_file_path)}",
+                file=sys.stderr,
+            )
+
+    coverage_output: json_t = {
+        tc.name: [
+            {
+                "edges": edge_datapoint.edge_count,
+                "time": edge_datapoint.time,
+                "generation": edge_datapoint.generation,
+            }
+            for edge_datapoint in coverage_info[tc.name]
+        ]
+        for tc in TARGET_CONFIGS
+    }
+    differentials_output: json_t = [
+        {
+            "differential": base64.b64encode(diff_with_info.differential).decode("ascii"),
+            "path": str(run_results_dir.joinpath(str(hash(diff_with_info.differential))).resolve()),
+            "time": diff_with_info.time_found,
+            "generation": diff_with_info.generation_found,
+        }
+        for diff_with_info in differentials_with_info
+    ]
+    output: json_t = {
+        "uuid": run_id,
+        "coverage": coverage_output,
+        "differentials": differentials_output,
+    }
+    with open(REPORTS_DIR.joinpath(run_id).with_suffix(".json"), "w", encoding="latin-1") as report_file:
+        report_file.write(json.dumps(output))
+
+    print(run_id)
+
+    shutil.rmtree(work_dir)
+
+
+if __name__ == "__main__":
+    main()

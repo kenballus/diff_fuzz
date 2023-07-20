@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+from sys import stdin
+from base64 import b64encode
+from os import _exit
+import hyperlink
+import afl
+afl.init()
+
+url_string = stdin.read()
+parsed_url = hyperlink.URL.from_text(url_string)
+
+result = {}
+result["scheme"] = parsed_url.scheme
+result["userinfo"] = parsed_url.userinfo
+result["host"] = parsed_url.host
+result["port"] = str(parsed_url.port) if parsed_url.port is not None else ""
+result["path"] = ("/" if parsed_url.rooted else "") + "/".join(parsed_url.path)
+result["query"] = "&".join(p[0] + (f"={p[1]}" if p[1] is not None else "") for p in parsed_url.query)
+result["fragment"] = parsed_url.fragment
+
+print("{" + ",".join(f"\"{k}\":\"{b64encode(result[k].encode('utf-8')).decode('ascii') if result[k] is not None else ''}\"" for k, v in result.items()) + "}", flush=True)
+_exit(0)

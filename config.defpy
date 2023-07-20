@@ -4,9 +4,10 @@
 # Add new targets by adding new entries to TARGET_CONFIGS.
 #############################################################################################
 
+import dataclasses
+import string
+import os
 from pathlib import PosixPath
-from dataclasses import dataclass, field
-from os import environ
 
 # The directory where the seed inputs are
 # The seeds are the files from which all the fuzzing inputs are produced,
@@ -17,16 +18,19 @@ SEED_DIR: PosixPath = PosixPath("./seeds")
 # The directory where the findings go when the fuzzer run finishes.
 RESULTS_DIR: PosixPath = PosixPath("./results")
 
+# The directory where run information will go
+REPORTS_DIR: PosixPath = PosixPath("./reports")
+
 # Time in milliseconds given to each process
 TIMEOUT_TIME: int = 10000
 
-# Set this to false if you only care about exit status differentials
+# Set this to False if you only care about exit status differentials
 # (i.e. the programs you're testing aren't expected to have identical output on stdout)
-DETECT_OUTPUT_DIFFERENTIALS: bool = False
+DETECT_OUTPUT_DIFFERENTIALS: bool = True
 
 # Set this to True if you want to use grammar mutations.
 # (Requires a grammar.py with the appropriate interface)
-USE_GRAMMAR_MUTATIONS: bool = False
+USE_GRAMMAR_MUTATIONS: bool = True
 
 # When this is True, a differential is registered if two targets exit with different status codes.
 # When it's False, a differential is registered only when one target exits with status 0 and another
@@ -34,40 +38,73 @@ USE_GRAMMAR_MUTATIONS: bool = False
 DIFFERENTIATE_NONZERO_EXIT_STATUSES: bool = False
 
 # Roughly how many processes to allow in a generation (within a factor of 2)
-ROUGH_DESIRED_QUEUE_LEN: int = 100
+ROUGH_DESIRED_QUEUE_LEN: int = 1000
 
 # The number of bytes deleted at a time in the minimization loop
 # The default choice was selected because of UTF-8.
-DELETION_LENGTHS: list[int] = [1]
+DELETION_LENGTHS: list[int] = [4, 3, 2, 1]
+
+_ASCII_LETTERS_TO_REPLACE: set[int] = {ord(c) for c in string.ascii_letters} - {ord("a")}
+_ASCII_DIGITS_TO_REPLACE: set[int] = {ord(c) for c in string.digits} - {ord("1")}
+
+
+# A function which takes a byte and returns the byte it should be replaced by during minimization
+# Useful for dealing with character jump-tables that cause duplicate results.
+# If the byte doesn't have a replacement candidate, b'' is returned.
+def get_replacement_byte(to_replace: int) -> bytes:
+    if to_replace in _ASCII_LETTERS_TO_REPLACE:
+        return b"a"
+    if to_replace in _ASCII_DIGITS_TO_REPLACE:
+        return b"1"
+    return b""
 
 
 # This is the parse tree class for your programs' output.
 # If DETECT_OUTPUT_DIFFERENTIALS is set to False, then you can leave this as it is.
 # Otherwise, our suggestion is that your programs output JSON with field values base64-encoded if need be.
 # In that case, this struct should have a single field for each field in that JSON object.
-# output JSON.
-@dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class ParseTree:
-    pass
+    scheme: bytes
+    userinfo: bytes
+    host: bytes
+    port: bytes
+    path: bytes
+    query: bytes
+    fragment: bytes
 
 
 # This is the comparison operation on optional parse trees.
 # During minimization, the result of the function is preserved.
 # If your programs' output is expected to match completely, then leave this as-is.
 # Otherwise, rewrite it to implement an equivalence relation between your parse trees.
-def compare_parse_trees(t1: ParseTree, t2: ParseTree) -> tuple[bool, ...]:
-    return (t1 == t2,)
+def compare_parse_trees(t1: ParseTree | None, t2: ParseTree | None) -> tuple[bool, ...]:
+    return (
+        (t1 is t2,)
+        if t1 is None or t2 is None
+        else (
+            t1.scheme.lower() == t2.scheme.lower(),
+            t1.userinfo.lower() == t2.userinfo.lower(),
+            t1.host.lower() == t2.host.lower(),
+            t1.port == t2.port,
+            t1.path == t2.path
+            or (t1.path.startswith(b"/") and t1.path[1:] == t2.path)
+            or (t2.path.startswith(b"/") and t2.path[1:] == t1.path),
+            t1.query == t2.query,
+            t1.fragment == t2.fragment,
+        )
+    )
 
 
 # This is the configuration class for each target program.
-@dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class TargetConfig:
     # A unique name for this target
     name: str
     # The path to this target's executable
     executable: PosixPath
     # The CLI arguments this target needs
-    cli_args: list[str] = field(default_factory=list)
+    cli_args: list[str] = dataclasses.field(default_factory=list)
     # Whether this executable should be traced.
     # (turning off tracing is useful for untraceable
     #  targets, such as those written in unsupported
@@ -79,23 +116,55 @@ class TargetConfig:
     # Whether this executable needs to run with python-afl (is a python script)
     needs_python_afl: bool = False
     # The environment variables to pass to the executable
-    env: dict[str, str] = field(default_factory=lambda: dict(environ))
+    env: dict[str, str] = dataclasses.field(default_factory=lambda: dict(os.environ))
 
 
 # Configuration for each fuzzing target
 TARGET_CONFIGS: list[TargetConfig] = [
     TargetConfig(
-        name="baby-cpp",
-        executable=PosixPath("./targets/baby-cpp/baby-cpp"),
+        name="ada",
+        executable=PosixPath("./targets/ada/ada_target"),
     ),
     TargetConfig(
-        name="baby-c",
-        executable=PosixPath("./targets/baby-c/baby-c"),
-        needs_qemu=True,
+        name="boost_url",
+        executable=PosixPath("./targets/boost_url/boost_url_target"),
     ),
-    # TargetConfig(
-    #     name="baby-py",
-    #     executable=PosixPath("./targets/baby-py/baby.py"),
-    #     needs_python_afl=True,
-    # ),
+    TargetConfig(
+        name="curl",
+        executable=PosixPath("./targets/curl/curl_target"),
+    ),
+    TargetConfig(
+        name="furl",
+        executable=PosixPath("./targets/furl/furl_target"),
+        needs_python_afl=True,
+    ),
+    TargetConfig(
+        name="hyperlink",
+        executable=PosixPath("./targets/hyperlink/hyperlink_target"),
+        needs_python_afl=True,
+    ),
+    TargetConfig(
+        name="libwget",
+        executable=PosixPath("./targets/libwget/libwget_target"),
+    ),
+    TargetConfig(
+        name="rfc3986",
+        executable=PosixPath("./targets/rfc3986/rfc3986_target"),
+        needs_python_afl=True,
+    ),
+    TargetConfig(
+        name="urllib",
+        executable=PosixPath("./targets/urllib/urllib_target"),
+        needs_python_afl=True,
+    ),
+    TargetConfig(
+        name="urllib3",
+        executable=PosixPath("./targets/urllib3/urllib3_target"),
+        needs_python_afl=True,
+    ),
+    TargetConfig(
+        name="yarl",
+        executable=PosixPath("./targets/yarl/yarl_target"),
+        needs_python_afl=True,
+    ),
 ]
