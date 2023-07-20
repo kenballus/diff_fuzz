@@ -4,9 +4,9 @@
 # Add new targets by adding new entries to TARGET_CONFIGS.
 #############################################################################################
 
+import dataclasses
+import os
 from pathlib import PosixPath
-from dataclasses import dataclass, field
-from os import environ
 
 # The directory where the seed inputs are
 # The seeds are the files from which all the fuzzing inputs are produced,
@@ -17,10 +17,13 @@ SEED_DIR: PosixPath = PosixPath("./seeds")
 # The directory where the findings go when the fuzzer run finishes.
 RESULTS_DIR: PosixPath = PosixPath("./results")
 
+# The directory where run information will go
+REPORTS_DIR: PosixPath = PosixPath("./reports")
+
 # Time in milliseconds given to each process
 TIMEOUT_TIME: int = 10000
 
-# Set this to false if you only care about exit status differentials
+# Set this to False if you only care about exit status differentials
 # (i.e. the programs you're testing aren't expected to have identical output on stdout)
 DETECT_OUTPUT_DIFFERENTIALS: bool = False
 
@@ -41,12 +44,18 @@ ROUGH_DESIRED_QUEUE_LEN: int = 100
 DELETION_LENGTHS: list[int] = [1]
 
 
+# A function which takes a byte and returns the byte it should be replaced by during minimization
+# Useful for dealing with character jump-tables that cause duplicate results.
+# If the byte doesn't have a replacement candidate, b'' is returned.
+def get_replacement_byte(to_replace: int) -> bytes:  # pylint: disable=unused-argument
+    return b""
+
+
 # This is the parse tree class for your programs' output.
 # If DETECT_OUTPUT_DIFFERENTIALS is set to False, then you can leave this as it is.
 # Otherwise, our suggestion is that your programs output JSON with field values base64-encoded if need be.
 # In that case, this struct should have a single field for each field in that JSON object.
-# output JSON.
-@dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class ParseTree:
     pass
 
@@ -55,19 +64,19 @@ class ParseTree:
 # During minimization, the result of the function is preserved.
 # If your programs' output is expected to match completely, then leave this as-is.
 # Otherwise, rewrite it to implement an equivalence relation between your parse trees.
-def compare_parse_trees(t1: ParseTree, t2: ParseTree) -> tuple[bool, ...]:
+def compare_parse_trees(t1: ParseTree | None, t2: ParseTree | None) -> tuple[bool, ...]:
     return (t1 == t2,)
 
 
 # This is the configuration class for each target program.
-@dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class TargetConfig:
     # A unique name for this target
     name: str
     # The path to this target's executable
     executable: PosixPath
     # The CLI arguments this target needs
-    cli_args: list[str] = field(default_factory=list)
+    cli_args: list[str] = dataclasses.field(default_factory=list)
     # Whether this executable should be traced.
     # (turning off tracing is useful for untraceable
     #  targets, such as those written in unsupported
@@ -79,7 +88,7 @@ class TargetConfig:
     # Whether this executable needs to run with python-afl (is a python script)
     needs_python_afl: bool = False
     # The environment variables to pass to the executable
-    env: dict[str, str] = field(default_factory=lambda: dict(environ))
+    env: dict[str, str] = dataclasses.field(default_factory=lambda: dict(os.environ))
 
 
 # Configuration for each fuzzing target
