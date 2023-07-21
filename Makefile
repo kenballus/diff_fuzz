@@ -9,7 +9,7 @@ format:
 	black -l 110 *.py
 
 typecheck:
-	mypy diff_fuzz.py
+	mypy *.py
 
 lint:
-	pylint --disable=line-too-long,missing-module-docstring,invalid-name,missing-function-docstring,missing-class-docstring,consider-using-with,too-many-locals,too-many-branches *.py
+	pylint --disable=protected-access,line-too-long,missing-module-docstring,invalid-name,missing-function-docstring,missing-class-docstring,consider-using-with,too-many-locals,too-many-branches *.py
