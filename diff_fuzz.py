@@ -44,7 +44,7 @@ from config import (
 
 if USE_GRAMMAR_MUTATIONS:
     try:
-        from grammar import GRAMMAR_MUTATORS
+        from grammar import GRAMMAR_MUTATORS  # type: ignore[import]
     except ModuleNotFoundError:
         print(
             "`grammar.py` not found. Either make one or set USE_GRAMMAR_MUTATIONS to False", file=sys.stderr
@@ -314,9 +314,9 @@ def split_input_queue(l: list[bytes], num_chunks: int) -> list[list[bytes]]:
     ]
 
 
-# Data class for holding information about how many cumulative unique edges of each parser were found in each generation and at what time.
-# Stored in JSON in the coverage list which has a list for each parser, these lists consist of JSON objects for each generation which record generation, time, and
-# number of unique edges uncovered in that parser up to that generation.
+# Data class for holding information about how many cumulative unique edges of each target were found in each generation and at what time.
+# Stored in JSON in the coverage list which has a list for each target, these lists consist of JSON objects for each generation which record generation, time, and
+# number of unique edges uncovered in that target up to that generation.
 @dataclasses.dataclass
 class EdgeCountSnapshot:
     edge_count: int
@@ -383,7 +383,7 @@ def fuzz(
                     pool.imap(functools.partial(trace_batch, work_dir), batches),
                     start=[],
                 )
-            print("done!", file=sys.stderr)
+            print("Done!", file=sys.stderr)
 
             # Re-run all the targets, this time collecting stdouts and statuses
             with multiprocessing.Pool(processes=num_workers) as pool:

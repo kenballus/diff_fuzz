@@ -1,7 +1,7 @@
 inputs
 traces
 **/__pycache__
-url_fuzz_env/*
+fuzz_env/*
 .hypothesis/*
 .mypy_cache/*
 python_pkgs/*
