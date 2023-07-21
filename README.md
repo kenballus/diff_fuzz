@@ -1,12 +1,25 @@
 # `diff_fuzz.py`
 `diff_fuzz.py` is a coverage-guided differential fuzzer written in Python.
 
-# Installation
+# Setting up the environment
+
+## With Docker
+Run
+```sh
+docker build . --tag diff_fuzz
+docker run -it --name diff_fuzz_container diff_fuzz:latest /bin/bash
+```
+
+## Without Docker
+This project uses `afl-showmap` for program tracing, so a working version of AFL or AFL++ is required.
+After acquiring these you must setup the fuzzing enviroment.
+
 To install and set up the fuzzing environment, run
 ```bash
 ./setup.sh
 ```
-(This will not install AFL++ or python3 for you. You'll need to get those yourself.)
+
+This will create a virtual enviroment with the appropriate python depndencies installed and will create a series of empty folders which are necessary for fuzzing.
 
 ### Binary Fuzzing
 If you want to fuzz binary targets without instrumentation, you'll need to use a build of AFL(++) with QEMU support enabled.
