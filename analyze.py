@@ -13,7 +13,8 @@ from typing import Callable, TypeVar
 import matplotlib.pyplot as plt  # type: ignore
 import numpy as np
 
-from diff_fuzz import trace_batch, fingerprint_t, json_t, EdgeCountSnapshot
+# TODO: make this use run_targets instead
+from diff_fuzz import trace_batch, fingerprint_t, json_t, EdgeCountSnapshot  # type: ignore
 
 BENCHMARKING_DIR: PosixPath = PosixPath("benchmarking").resolve()
 RESULTS_DIR: PosixPath = PosixPath("results").resolve()
