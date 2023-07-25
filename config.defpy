@@ -102,9 +102,9 @@ TARGET_CONFIGS: list[TargetConfig] = [
         executable=PosixPath("./targets/baby-c/baby-c"),
         needs_qemu=True,
     ),
-    # TargetConfig(
-    #     name="baby-py",
-    #     executable=PosixPath("./targets/baby-py/baby.py"),
-    #     needs_python_afl=True,
-    # ),
+    TargetConfig(
+        name="baby-py",
+        executable=PosixPath("./targets/baby-py/baby.py"),
+        needs_python_afl=True,
+    ),
 ]
