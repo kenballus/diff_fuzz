@@ -124,7 +124,6 @@ def make_command_line(tc: TargetConfig) -> list[str]:
             command_line.append("afl-showmap")
             if tc.needs_qemu:  # Enable QEMU mode, if necessary
                 command_line.append("-Q")
-        command_line.append("-q")  # Don't care about traced program stdout
         command_line.append("-e")  # Only care about edge coverage; ignore hit counts
         command_line += ["-o", "/dev/stdout"]
 
@@ -230,25 +229,33 @@ def run_targets(the_input: bytes) -> tuple[tuple[int, ...], tuple[ParseTree | No
     if not DIFFERENTIATE_NONZERO_EXIT_STATUSES:
         statuses = tuple(map(lambda i: int(bool(i)), statuses))
 
-    # TODO: Make seperate trace output and parse trees
-    # Extract the parse trees
-    parse_trees: tuple[ParseTree | None, ...] = tuple(
-        ParseTree(**{k: base64.b64decode(v) for k, v in json.loads(proc.stdout.read()).items()})
-        if proc.stdout is not None and status == 0
-        else None
-        for proc, status in zip(procs, statuses)
-    )
-
-    # Extract the traces
+    # Break apart stdout
+    parse_trees: list[ParseTree | None] = []
     fingerprint: list[frozenset[int]] = []
-    for tc in TARGET_CONFIGS:
-        if tc.needs_tracing:
-            # TODO: Read the trace into a fingerprint
-            fingerprint.append(frozenset())
-        else:
-            fingerprint.append(frozenset())
+    for proc, status, tc in zip(procs, statuses, TARGET_CONFIGS):
+        if proc.stdout is not None:
+            stdout_components: list[bytes] = proc.stdout.read().split(b"\n")
+            target_edges: set[int] = set()
+            tree: ParseTree | None = None
+            for component in stdout_components:
+                if len(component) < 2:
+                    continue
+                # Extract the parse tree
+                if component[0] == b"{" and component[-1] == b"}":
+                    tree = (
+                        ParseTree(
+                            **{k: base64.b64decode(v) for k, v in json.loads(stdout_components[0]).items()}
+                        )
+                        if status == 0
+                        else None
+                    )
+                # Extract hit edges
+                elif component[-2:] == b":1" and tc.needs_tracing:
+                    target_edges.add(int(str(component[:-2], encoding="latin-1")))
+            parse_trees.append(tree)
+            fingerprint.append(frozenset(target_edges))
 
-    return statuses, parse_trees, tuple(fingerprint)
+    return statuses, tuple(parse_trees), tuple(fingerprint)
 
 
 # Data class for holding information about how many cumulative unique edges of each parser were found in each generation and at what time.
@@ -365,7 +372,6 @@ def fuzz() -> tuple[list[Differential], dict[str, list[EdgeCountSnapshot]]]:
                             Differential(minimized_input, time.time() - start_time, generation)
                         )
                         minimized_fingerprints.add(minimized_fingerprint)
-
             input_queue.clear()
             while len(mutation_candidates) != 0 and len(input_queue) < ROUGH_DESIRED_QUEUE_LEN:
                 input_queue += list(map(mutate, mutation_candidates))
