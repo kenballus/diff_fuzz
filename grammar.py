@@ -175,7 +175,7 @@ def grammar_insert(b: bytes) -> bytes:
     rules_to_fill: list[str] = [
         s
         for s in INSERTABLE_RULES + (INSERTABLE_RULES_WITH_HOST if match["host"] is not None else [])
-        if match[s] is None
+        if s not in match.groupdict() or match[s] is None
     ]
 
     if len(rules_to_fill) == 0:
@@ -215,6 +215,10 @@ def serialize(match: dict[str, bytes | None] | re.Match[bytes]) -> bytes:
     """
     if isinstance(match, re.Match):
         match = match.groupdict()
+
+    for rule_name in grammar_rules:
+        if rule_name not in match:
+            match[rule_name] = None
 
     result = b""
     if match["scheme"] is not None:
