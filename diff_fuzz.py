@@ -229,19 +229,18 @@ def run_targets(the_input: bytes) -> tuple[tuple[int, ...], tuple[ParseTree | No
     if not DIFFERENTIATE_NONZERO_EXIT_STATUSES:
         statuses = tuple(map(lambda i: int(bool(i)), statuses))
 
-    # TODO: Make seperate trace output and parse trees
     # Break apart stdout
     parse_trees: list[ParseTree | None] = []
     fingerprint: list[frozenset[int]] = []
     for proc, status, tc in zip(procs, statuses, TARGET_CONFIGS):
         if proc.stdout is not None:
-            # Extract the parse trees
             stdout_components: list[bytes] = proc.stdout.read().split(b"\n")
             target_edges: set[int] = set()
             tree: ParseTree | None = None
             for component in stdout_components:
                 if len(component) < 2:
                     continue
+                # Extract the parse tree
                 if component[0] == b"{" and component[-1] == b"}":
                     tree = (
                         ParseTree(
@@ -250,6 +249,7 @@ def run_targets(the_input: bytes) -> tuple[tuple[int, ...], tuple[ParseTree | No
                         if status == 0
                         else None
                     )
+                # Extract hit edges
                 elif component[-2:] == b":1" and tc.needs_tracing:
                     target_edges.add(int(str(component[:-2], encoding="latin-1")))
             parse_trees.append(tree)

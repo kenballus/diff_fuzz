@@ -13,13 +13,12 @@ from typing import Callable, TypeVar
 import matplotlib.pyplot as plt  # type: ignore
 import numpy as np
 
-from diff_fuzz import trace_batch, fingerprint_t, json_t, EdgeCountSnapshot  # type: ignore
+from diff_fuzz import run_targets, fingerprint_t, json_t, EdgeCountSnapshot
 
 BENCHMARKING_DIR: PosixPath = PosixPath("benchmarking").resolve()
 RESULTS_DIR: PosixPath = PosixPath("results").resolve()
 REPORTS_DIR: PosixPath = PosixPath("reports").resolve()
 ANALYSES_DIR: PosixPath = BENCHMARKING_DIR.joinpath("analyses").resolve()
-RUN_DIR: PosixPath = PosixPath("/tmp").joinpath("diff-fuzz-analyzer")
 
 CONFIG_FILE_PATH: PosixPath = PosixPath("config.py").resolve()
 CONFIG_COPY_PATH: PosixPath = BENCHMARKING_DIR.joinpath("config_copy.py")
@@ -120,13 +119,10 @@ def read_byte_differentials(
 # The dictionary maps each found fingerprint to a byte differential example.
 def trace_byte_differentials(byte_differentials: list[bytes]) -> dict[fingerprint_t, bytes]:
     # Trace the bugs
-    if os.path.exists(RUN_DIR):
-        raise ValueError(f"Run directory already exists! Please delete {RUN_DIR.resolve()}")
-    os.mkdir(RUN_DIR)
-    try:
-        fingerprints: list[fingerprint_t] = trace_batch(RUN_DIR, byte_differentials)
-    finally:
-        attempt(shutil.rmtree, f"Failed to cleanup the run directory at {RUN_DIR}", RUN_DIR)
+    fingerprints: list[fingerprint_t] = []
+    for byte_differential in byte_differentials:
+        _, _, fingerprint = run_targets(byte_differential)
+        fingerprints.append(fingerprint)
 
     # Record
     fingerprints_to_bytes = {}
