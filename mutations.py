@@ -3,6 +3,26 @@ import random
 from typing import Callable
 import re_generate
 
+
+def byte_replace(b: bytes) -> bytes:
+    if len(b) == 0:
+        raise ValueError("Mutation precondition didn't hold.")
+    index: int = random.randint(0, len(b) - 1)
+    return b[:index] + bytes([random.randint(0, 255)]) + b[index + 1 :]
+
+
+def byte_insert(b: bytes) -> bytes:
+    index: int = random.randint(0, len(b))
+    return b[:index] + bytes([random.randint(0, 255)]) + b[index:]
+
+
+def byte_delete(b: bytes) -> bytes:
+    if len(b) <= 1:
+        raise ValueError("Mutation precondition didn't hold.")
+    index: int = random.randint(0, len(b) - 1)
+    return b[:index] + b[index + 1 :]
+
+
 # A grammar maps rule names either a string or a sequence of rule names
 # A terminal always maps to a regex
 # A nonterminal always maps to a list of rule names
@@ -246,4 +266,11 @@ def serialize(match: dict[str, bytes | None] | re.Match[bytes]) -> bytes:
     return result
 
 
-GRAMMAR_MUTATORS: list[Callable[[bytes], bytes]] = [grammar_delete, grammar_insert, grammar_replace]
+MUTATORS: list[Callable[[bytes], bytes]] = [
+    byte_delete,
+    byte_insert,
+    byte_replace,
+    grammar_delete,
+    grammar_insert,
+    grammar_replace,
+]
