@@ -21,10 +21,9 @@ import base64
 import time
 from pathlib import PosixPath
 from typing import Callable
-
-
 from tqdm import tqdm  # type: ignore
 
+from mutations import MUTATORS
 from config import (
     compare_parse_trees,
     get_replacement_byte,
@@ -39,17 +38,7 @@ from config import (
     DELETION_LENGTHS,
     RESULTS_DIR,
     REPORTS_DIR,
-    USE_GRAMMAR_MUTATIONS,
 )
-
-if USE_GRAMMAR_MUTATIONS:
-    try:
-        from grammar import GRAMMAR_MUTATORS  # type: ignore[import]
-    except ModuleNotFoundError:
-        print(
-            "`grammar.py` not found. Either make one or set USE_GRAMMAR_MUTATIONS to False", file=sys.stderr
-        )
-        sys.exit(1)
 
 assert SEED_DIR.is_dir()
 SEED_INPUTS: list[PosixPath] = list(map(lambda s: SEED_DIR.joinpath(PosixPath(s)), os.listdir(SEED_DIR)))
@@ -62,30 +51,6 @@ assert all(map(lambda tc: tc.executable.exists(), TARGET_CONFIGS))
 fingerprint_t = tuple[frozenset[int], ...]
 
 json_t = None | bool | str | int | float | dict[str, "json_t"] | list["json_t"]
-
-
-def byte_replace(b: bytes) -> bytes:
-    if len(b) == 0:
-        raise ValueError("Mutation precondition didn't hold.")
-    index: int = random.randint(0, len(b) - 1)
-    return b[:index] + bytes([random.randint(0, 255)]) + b[index + 1 :]
-
-
-def byte_insert(b: bytes) -> bytes:
-    index: int = random.randint(0, len(b))
-    return b[:index] + bytes([random.randint(0, 255)]) + b[index:]
-
-
-def byte_delete(b: bytes) -> bytes:
-    if len(b) <= 1:
-        raise ValueError("Mutation precondition didn't hold.")
-    index: int = random.randint(0, len(b) - 1)
-    return b[:index] + b[index + 1 :]
-
-
-MUTATORS: list[Callable[[bytes], bytes]] = [byte_replace, byte_insert, byte_delete] + (
-    GRAMMAR_MUTATORS if USE_GRAMMAR_MUTATIONS else []
-)
 
 
 def mutate(b: bytes) -> bytes:

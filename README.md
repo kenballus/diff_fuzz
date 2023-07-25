@@ -86,13 +86,16 @@ Coverage:                       (3, 23, 28)
 - `Mutation Candidates` is the number of generated inputs in this generation that were interesting enough such that they can be used as the basis for further mutation.
 - `Coverage` is the number of unique edges hit by this run of fuzzer for each target by the end of this generation.
 
-# Grammar-Based Fuzzing
-To use grammar-based mutation, you need to supply a file `grammar.py` with the following symbol defined:
-- `GRAMMAR_MUTATORS`:   A list of functions which take bytes and apply a mutation to those bytes.
+# Custom Mutations
+To use custom mutations, you need to edit the file `mutations.py` with the following symbol defined:
+- `MUTATORS`:   A list of functions which take bytes and apply a mutation to those bytes.
     - We suggest that the mutators should not introduce new bytes which are further from each other than the deletion lengths specified in the config file. Doing so will increase the chance that bugs are misclassfied during minimization.
     - ```python
-      GRAMMAR_MUTATORS: list[Callable[[bytes], bytes]] = [grammar_delete, grammar_insert, grammar_replace]
+      MUTATORS: list[Callable[[bytes], bytes]] = [byte_delete, byte_insert, byte_replace, grammar_delete, grammar_insert, grammar_replace]
       ```
+    - To add your own mutators simply add the mutation functions to the `MUTATORS` list.
+    - If a mutation cannot be applied to a given bytes object then return `ValueError`.
+    - When mutating a random mutation that doesn't return `ValueError` from the `MUTATORS` list will be applied.
 
 # Acknowledgements:
 This work made possible by the DARPA GAPS program and the GAPS teams at GE Research and Dartmouth College.
