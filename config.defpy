@@ -5,7 +5,6 @@
 #############################################################################################
 
 import dataclasses
-import os
 from pathlib import PosixPath
 
 # The directory where the seed inputs are
@@ -21,7 +20,7 @@ RESULTS_DIR: PosixPath = PosixPath("./results")
 REPORTS_DIR: PosixPath = PosixPath("./reports")
 
 # Time in milliseconds given to each process
-TIMEOUT_TIME: int = 10000
+TIMEOUT_TIME: int = 500
 
 # Set this to False if you only care about exit status differentials
 # (i.e. the programs you're testing aren't expected to have identical output on stdout)
@@ -69,42 +68,35 @@ def compare_parse_trees(t1: ParseTree | None, t2: ParseTree | None) -> tuple[boo
 
 
 # This is the configuration class for each target program.
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass()
 class TargetConfig:
     # A unique name for this target
     name: str
-    # The path to this target's executable
-    executable: PosixPath
-    # The CLI arguments this target needs
-    cli_args: list[str] = dataclasses.field(default_factory=list)
+    # Name of the docker container running this server
+    docker_name: str
+    # Port number to access this server from
+    port: int = 8000
+    # Maximum concurrent requests a target can handle
+    max_threads: int = 32
+    # IP for the docker container, if none is provider then it will use the docker_name to lookup the IP
+    ip: str = ""
     # Whether this executable should be traced.
     # (turning off tracing is useful for untraceable
     #  targets, such as those written in unsupported
     #  languages)
     needs_tracing: bool = True
-    # Whether this executable needs to run in QEMU mode
-    # (should be True when target is not instrumented for AFL)
-    needs_qemu: bool = False
-    # Whether this executable needs to run with python-afl (is a python script)
-    needs_python_afl: bool = False
-    # The environment variables to pass to the executable
-    env: dict[str, str] = dataclasses.field(default_factory=lambda: dict(os.environ))
 
 
 # Configuration for each fuzzing target
 TARGET_CONFIGS: list[TargetConfig] = [
     TargetConfig(
-        name="baby-cpp",
-        executable=PosixPath("./targets/baby-cpp/baby-cpp"),
+        name="simpleserver",
+        docker_name="mysimpleserver",
+        max_threads=20,
     ),
     TargetConfig(
-        name="baby-c",
-        executable=PosixPath("./targets/baby-c/baby-c"),
-        needs_qemu=True,
+        name="mongoose",
+        docker_name="mymongoose",
+        max_threads=20,
     ),
-    # TargetConfig(
-    #     name="baby-py",
-    #     executable=PosixPath("./targets/baby-py/baby.py"),
-    #     needs_python_afl=True,
-    # ),
 ]

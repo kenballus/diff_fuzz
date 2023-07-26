@@ -7,35 +7,32 @@
 #############################################################################################
 
 import sys
-import subprocess
 import dataclasses
 import multiprocessing
 import random
 import itertools
 import os
 import json
-import functools
 import uuid
 import shutil
 import base64
 import time
+import socket
 from pathlib import PosixPath
 from typing import Callable
 
-
+import docker  # type: ignore
 from tqdm import tqdm  # type: ignore
 
 from config import (
     compare_parse_trees,
     get_replacement_byte,
     ParseTree,
-    TargetConfig,
     TIMEOUT_TIME,
     TARGET_CONFIGS,
     ROUGH_DESIRED_QUEUE_LEN,
     SEED_DIR,
     DETECT_OUTPUT_DIFFERENTIALS,
-    DIFFERENTIATE_NONZERO_EXIT_STATUSES,
     DELETION_LENGTHS,
     RESULTS_DIR,
     REPORTS_DIR,
@@ -56,8 +53,6 @@ SEED_INPUTS: list[PosixPath] = list(map(lambda s: SEED_DIR.joinpath(PosixPath(s)
 
 assert RESULTS_DIR.is_dir()
 assert REPORTS_DIR.is_dir()
-
-assert all(map(lambda tc: tc.executable.exists(), TARGET_CONFIGS))
 
 fingerprint_t = tuple[frozenset[int], ...]
 
@@ -111,33 +106,22 @@ def parse_tracer_output(tracer_output: bytes) -> frozenset[int]:
     return frozenset(result)
 
 
-def make_command_line(tc: TargetConfig) -> list[str]:
-    """
-    Make the afl-showmap command line for this target config.
-    If input_dir and output_dir are None, then read from stdin and write to stdout.
-    """
-    command_line: list[str] = []
-    if tc.needs_tracing:
-        if tc.needs_python_afl:
-            command_line.append("py-afl-showmap")
-        else:
-            command_line.append("afl-showmap")
-            if tc.needs_qemu:  # Enable QEMU mode, if necessary
-                command_line.append("-Q")
-        command_line.append("-e")  # Only care about edge coverage; ignore hit counts
-        command_line += ["-o", "/dev/stdout"]
-
-        command_line += ["-t", str(TIMEOUT_TIME)]
-        command_line.append("--")
-
-    command_line.append(str(tc.executable.resolve()))
-    command_line += tc.cli_args
-
-    return command_line
+def send_input_all_targets(
+    input_to_send: bytes,
+) -> tuple[tuple[int, ...], tuple[ParseTree | None, ...], fingerprint_t]:
+    statuses: list[int] = []
+    parse_trees: list[ParseTree | None] = []
+    fingerprint: list[frozenset[int]] = []
+    for tc in TARGET_CONFIGS:
+        status, parse_tree, edge_set = send_input(input_to_send, tc.ip, tc.port)
+        statuses.append(status)
+        parse_trees.append(parse_tree)
+        fingerprint.append(edge_set)
+    return (tuple(statuses), tuple(parse_trees), tuple(fingerprint))
 
 
 def minimize_differential(bug_inducing_input: bytes) -> tuple[bytes, fingerprint_t]:
-    orig_statuses, orig_parse_trees, orig_fingerprint = run_targets(bug_inducing_input)
+    orig_statuses, orig_parse_trees, orig_fingerprint = send_input_all_targets(bug_inducing_input)
 
     needs_parse_tree_comparison: bool = len(set(orig_statuses)) == 1
 
@@ -157,7 +141,7 @@ def minimize_differential(bug_inducing_input: bytes) -> tuple[bytes, fingerprint
             if reduced_form == b"":
                 i -= 1
                 continue
-            new_statuses, new_parse_trees, new_fingerprint = run_targets(reduced_form)
+            new_statuses, new_parse_trees, new_fingerprint = send_input_all_targets(reduced_form)
             if (
                 new_statuses == orig_statuses
                 and (
@@ -179,7 +163,7 @@ def minimize_differential(bug_inducing_input: bytes) -> tuple[bytes, fingerprint
         if replacement_byte == b"":  # No replacement can be made
             continue
         substituted_form: bytes = result_input[:i] + replacement_byte + result_input[i + 1 :]
-        new_statuses, new_parse_trees, new_fingerprint = run_targets(substituted_form)
+        new_statuses, new_parse_trees, new_fingerprint = send_input_all_targets(reduced_form)
         if (
             new_statuses == orig_statuses
             and (
@@ -195,67 +179,24 @@ def minimize_differential(bug_inducing_input: bytes) -> tuple[bytes, fingerprint
     return result_input, result_fingerprint
 
 
-@functools.cache
-def run_targets(the_input: bytes) -> tuple[tuple[int, ...], tuple[ParseTree | None, ...], fingerprint_t]:
-    """
-    This function needs a better name.
-    This runs the targets on an input, and returns a (exit_statuses, parse_trees) pair.
-    (A call to this function makes one process for each configured target)
-    """
-    procs: list[subprocess.Popen] = []
-
-    for tc in TARGET_CONFIGS:
-        command_line: list[str] = make_command_line(tc)
-
-        proc: subprocess.Popen = subprocess.Popen(
-            command_line,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE if DETECT_OUTPUT_DIFFERENTIALS else subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            env=tc.env,
-        )
-        assert proc.stdin is not None
-        proc.stdin.write(the_input)
-        proc.stdin.close()
-        procs.append(proc)
-
-    # Wait for the processes to exit
-    for proc in procs:
-        if proc is not None:
-            proc.wait()
-
-    # Extract the exit statuses
-    statuses: tuple[int, ...] = tuple(proc.returncode for proc in procs)
-    if not DIFFERENTIATE_NONZERO_EXIT_STATUSES:
-        statuses = tuple(map(lambda i: int(bool(i)), statuses))
-
-    # Break apart stdout
-    parse_trees: list[ParseTree | None] = []
-    fingerprint: list[frozenset[int]] = []
-    for proc, status, tc in zip(procs, statuses, TARGET_CONFIGS):
-        if proc.stdout is not None:
-            stdout_components: list[bytes] = proc.stdout.read().split(b"\n")
-            target_edges: set[int] = set()
-            tree: ParseTree | None = None
-            for component in stdout_components:
-                if len(component) < 2:
-                    continue
-                # Extract the parse tree
-                if component[0] == b"{" and component[-1] == b"}":
-                    tree = (
-                        ParseTree(
-                            **{k: base64.b64decode(v) for k, v in json.loads(stdout_components[0]).items()}
-                        )
-                        if status == 0
-                        else None
-                    )
-                # Extract hit edges
-                elif component[-2:] == b":1" and tc.needs_tracing:
-                    target_edges.add(int(str(component[:-2], encoding="latin-1")))
-            parse_trees.append(tree)
-            fingerprint.append(frozenset(target_edges))
-
-    return statuses, tuple(parse_trees), tuple(fingerprint)
+def send_input(input_to_send: bytes, ip: str, port: int) -> tuple[int, ParseTree | None, frozenset[int]]:
+    sock = socket.socket()
+    sock.connect((ip, port))
+    sock.sendall(input_to_send)
+    sock.settimeout(TIMEOUT_TIME / 1000)
+    result = b""
+    try:
+        while True:
+            stuff = sock.recv(65536)
+            if stuff == b"":
+                break
+            result = result + stuff
+    except TimeoutError:
+        pass
+    if result == b"":
+        return (1, None, frozenset(set()))
+    edges = set(random.randint(0, 100) for _ in range(10))  # TODO: Remove this
+    return (0, None, frozenset(edges))  # TODO: fill out (Recover parsetree and trace)
 
 
 # Data class for holding information about how many cumulative unique edges of each parser were found in each generation and at what time.
@@ -281,6 +222,17 @@ def fuzz() -> tuple[list[Differential], dict[str, list[EdgeCountSnapshot]]]:
     coverage_info: dict[str, list[EdgeCountSnapshot]] = {tc.name: [] for tc in TARGET_CONFIGS}
     num_cpus = os.cpu_count()
     assert num_cpus is not None
+
+    # Make sure all IPs are set
+    containers = docker.from_env().containers.list()
+    for tc in TARGET_CONFIGS:
+        if tc.ip == "":
+            for container in containers:
+                if container.name == tc.docker_name:
+                    tc.ip = container.attrs["NetworkSettings"]["IPAddress"]
+                    break
+            else:
+                raise NameError(f"Docker container {tc.docker_name} not found!")
 
     # Since each parser run makes len(TARGET_CONFIGS) processes,
     # we should have about (num_cpus / len(TARGET_CONFIGS)) workers.
@@ -315,16 +267,37 @@ def fuzz() -> tuple[list[Differential], dict[str, list[EdgeCountSnapshot]]]:
             mutation_candidates: list[bytes] = []
             differentials: list[bytes] = []
 
-            # Re-run all the targets, this time collecting stdouts and statuses
-            with multiprocessing.Pool(processes=num_workers) as pool:
-                statuses_parse_trees_fingerprint: list[
-                    tuple[tuple[int, ...], tuple[ParseTree | None, ...], fingerprint_t]
-                ] = list(
-                    tqdm(
-                        pool.imap(run_targets, input_queue),
-                        desc="Running targets...",
-                        total=len(input_queue),
+            run_results: list[list[tuple[int, ParseTree | None, frozenset[int]]]] = []
+            # Run all the targets
+            for tc in TARGET_CONFIGS:
+                with multiprocessing.Pool(processes=min(num_workers, tc.max_threads)) as pool:
+                    complete_queue: list[tuple[bytes, str, int]] = list(
+                        (i, tc.ip, tc.port) for i in input_queue
                     )
+                    run_results.append(
+                        list(
+                            tqdm(
+                                pool.starmap(send_input, complete_queue),
+                                desc=f"Running targets on {tc.name}...",
+                                total=len(input_queue),
+                            )
+                        )
+                    )
+
+            statuses_parse_trees_fingerprint: list[
+                tuple[tuple[int, ...], tuple[ParseTree | None, ...], fingerprint_t]
+            ] = []
+
+            for idx in range(len(input_queue)):
+                reorg_states: list[int] = []
+                reorg_parse_trees: list[ParseTree | None] = []
+                reorg_edge_sets: list[frozenset[int]] = []
+                for tc_results in run_results:
+                    reorg_states.append(tc_results[idx][0])
+                    reorg_parse_trees.append(tc_results[idx][1])
+                    reorg_edge_sets.append(tc_results[idx][2])
+                statuses_parse_trees_fingerprint.append(
+                    (tuple(reorg_states), tuple(reorg_parse_trees), tuple(reorg_edge_sets))
                 )
 
             # Check for differentials and new coverage
@@ -357,6 +330,7 @@ def fuzz() -> tuple[list[Differential], dict[str, list[EdgeCountSnapshot]]]:
                 )
 
             # Minimize differentials
+            # TODO: Cap threads to not overwhelm server or restructure
             with multiprocessing.Pool(processes=num_workers) as pool:
                 minimized_inputs: list[tuple[bytes, fingerprint_t]] = list(
                     tqdm(
