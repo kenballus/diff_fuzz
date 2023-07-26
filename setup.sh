@@ -23,7 +23,7 @@ pip3 install --upgrade pip &>/dev/null || fail "Couldn't update pip."
 echo "done"
 
 echo -n "Installing dependencies..."
-for pkg in tqdm types-tqdm python-afl black mypy pylint matplotlib; do
+for pkg in tqdm types-tqdm python-afl black mypy pylint matplotlib docker; do
     pip3 install "$pkg" &>/dev/null || fail "Couldn't install remote package $pkg."
 done
 echo "done"
