@@ -195,8 +195,12 @@ def send_input(input_to_send: bytes, ip: str, port: int) -> tuple[int, ParseTree
         pass
     if result == b"":
         return (1, None, frozenset(set()))
+
+    # Extract the parse trees
+    parse_tree: ParseTree = ParseTree(result)  # TODO: Do parse Trees for HTTP
+
     edges = set(random.randint(0, 100) for _ in range(10))  # TODO: Remove this
-    return (0, None, frozenset(edges))  # TODO: fill out (Recover parsetree and trace)
+    return (0, parse_tree, frozenset(edges))
 
 
 # Data class for holding information about how many cumulative unique edges of each parser were found in each generation and at what time.
