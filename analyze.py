@@ -13,7 +13,7 @@ from typing import Callable, TypeVar
 import matplotlib.pyplot as plt  # type: ignore
 import numpy as np
 
-# TODO: Fix benchmarks to run with http
+# TODO: Fix analyze to run with http, can remove the subsequent type: ignore once do
 from diff_fuzz import run_targets, fingerprint_t, json_t, EdgeCountSnapshot  # type: ignore
 
 BENCHMARKING_DIR: PosixPath = PosixPath("benchmarking").resolve()

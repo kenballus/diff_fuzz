@@ -199,7 +199,9 @@ def send_input(input_to_send: bytes, ip: str, port: int) -> tuple[int, ParseTree
     # Extract the parse trees
     parse_tree: ParseTree = ParseTree(result)  # TODO: Do parse Trees for HTTP
 
-    edges = set(random.randint(0, 100) for _ in range(10))  # TODO: Remove this
+    edges = set(
+        random.randint(0, 100) for _ in range(10)
+    )  # TODO: Read edges from trace outputs instead of randomly generating
     return (0, parse_tree, frozenset(edges))
 
 
